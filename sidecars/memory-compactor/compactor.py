@@ -402,6 +402,18 @@ def get_or_create_conversation(prompt):
 def process_logs():
     start_time = time.time()
 
+    def _get_active_topic(conn, project_uuid):
+        try:
+            cursor = conn.execute(
+                "SELECT topic_id FROM project_topics WHERE uuid = ? AND status = 'open' ORDER BY updated_at DESC LIMIT 1",
+                (project_uuid,)
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except Exception as te:
+            print(f"Error querying active topic: {str(te)}", file=sys.stderr)
+            return None
+
     with sqlite3.connect(DB_PATH) as conn:
         active_sessions = get_active_conversations()
         for session in active_sessions:
@@ -450,22 +462,46 @@ def process_logs():
             # 4. 采用更鲁棒的正则截取 JSON 结构，免受前后纯文本时间戳的解析干扰。
             current_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
 
-            # 中文翻译：[系统约束] 这是一个无状态的提取任务。在每行日志的开头有类似于 [line_123] 的前缀，它指代了该行的物理行号。你必须在 JSON 的 evidence_msg_ids 中返回支撑该决策的具体行号范围的整数数组（例如 [123, 124]），严禁返回空数组 []。如果在 MODEL 回复中包含了明确的自我纠偏、赞同并采纳用户提议（如“纠正错误/偏差”、“赞同该提议”、“已采纳该设计”），你必须在 decision 结构体中输出 "user_confirmed": true 字段。你必须在 JSON markdown 块的前一行输出该确切的时间戳：[Sync Finished: {current_time_str}]。
+            # 获取用户手动控制的当前活跃话题
+            active_topic_id = _get_active_topic(conn, session['project_uuid'])
+            topic_constraint_desc = ""
+            topic_constraint_prompt = ""
+
+            if active_topic_id:
+                # 中文翻译：[手动话题整合约束] 当前会话正处于用户手动控制的活跃话题 "{active_topic_id}" 下。你必须将本次提取的所有决策强制归属于此话题 ID，严禁生成或归纳新的话题 ID！
+                topic_constraint_desc = f"\n[MANUAL TOPIC CONSTRAINT]\nThe current session is inside an active manual topic \"{active_topic_id}\".\nYou MUST group all extracted decisions under this specific topic_id: \"{active_topic_id}\".\nDo NOT generate a new topic_id or topic summary. Just reuse \"{active_topic_id}\" as the topic_id in your output."
+                topic_constraint_prompt = f"\nNote: You MUST reuse \"{active_topic_id}\" as the topic_id in your output, do NOT create any other topic_id."
+
+            # 中文翻译：[系统约束] 这是一个无状态的提取任务。在每行日志的开头有类似于 [line_123] 的前缀，它指代了该行的物理行号。你必须在 JSON 的 evidence_msg_ids 中返回支撑该决策的具体行号范围的整数数组（例如 [123, 124]），严禁返回空数组 []。如果在 MODEL 回复中包含了明确的自我纠偏、赞同并采纳用户提议（如“纠正错误/偏差”、“赞同该提议”、“已采纳该设计”），你必须在 decision 结构体中输出 "user_confirmed": true 字段。你必须在 JSON markdown 块的前一行输出该确切的时间戳：[Sync Finished: {current_time_str}]。{topic_constraint_desc}
             prompt = f"""[SYSTEM CONSTRAINT]
 This is a stateless extraction task. The conversation logs provided below are completely independent of any previous messages in this session.
 You MUST ignore all previous contexts, topics, and decisions in this conversation history. Extract ADRs ONLY based on the new logs provided below.
 Each line of the log is prefixed with its physical line number, e.g. [line_123]. You MUST reference these numbers.
+{topic_constraint_desc}
 
 You MUST output this exact timestamp on the first line before your JSON markdown block (do NOT put it inside the markdown code block):
 [Sync Finished: {current_time_str}]
 
 You are an expert Architecture Decision Record (ADR) extractor.
 Analyze the following conversation snippets and extract all key topics.
-You MUST output ONLY a valid JSON object with this structure:
-{{"topics": [{{"topic_id": "t_001", "summary": "...", "decisions": [{{"decision": "...", "rationale": "...", "evidence_msg_ids": [123, 125], "user_confirmed": false}}]}}]}}
-Note: evidence_msg_ids MUST NOT be empty. Fill it with the actual line numbers from [line_XXXX] prefixes that justify the decision.
+
+You MUST output ONLY a valid JSON object matching this schema:
+{{
+  "all_decisions_discussed": ["decision draft 1", "decision draft 2"],
+  "topics": [
+    {{
+      "topic_id": "t_001",
+      "summary": "...",
+      "decisions": [
+        {{"decision": "...", "rationale": "...", "evidence_msg_ids": [123, 125], "user_confirmed": false}}
+      ]
+    }}
+  ]
+}}
+Note: "all_decisions_discussed" is a flat string list of ALL architectural/implementation decisions (including minor, rejected, or trivial ones) discussed in the log. You MUST list ALL discussed decisions honestly and comprehensively without summarizing or skipping, as this is used for strict Checksum validation.{topic_constraint_prompt}
+Note: evidence_msg_ids MUST NOT be empty. Fill it with the actual line numbers from [line_XXXX] prefixes.
 Note: If the MODEL output shows clear self-correction, agreement, or adoption of user's proposal, set "user_confirmed": true.
-If no significant topics, output: {{"topics": []}}
+If no significant topics, output: {{"all_decisions_discussed": [], "topics": []}}
 
 [CONVERSATION]
 """ + key_content
@@ -490,13 +526,24 @@ If no significant topics, output: {{"topics": []}}
 
             try:
                 data = json.loads(json_str)
+                all_discussed = data.get("all_decisions_discussed", [])
+                total_discussed = len(all_discussed)
+                total_compressed = 0
+                for t in data.get("topics", []):
+                    total_compressed += len(t.get("decisions", []))
+
+                # 计算客观压缩 Checksum 置信度 (Pass Rate)
+                confidence = 1.0
+                if total_discussed > 0:
+                    confidence = min(1.0, total_compressed / total_discussed)
+
                 for t in data.get("topics", []):
                     conn.execute(
-                        """INSERT INTO project_topics (uuid, topic_id, summary)
-                           VALUES (?, ?, ?)
-                           ON CONFLICT(uuid, topic_id) DO UPDATE SET summary=?""",
+                        """INSERT INTO project_topics (uuid, topic_id, summary, compression_confidence)
+                           VALUES (?, ?, ?, ?)
+                           ON CONFLICT(uuid, topic_id) DO UPDATE SET summary=?, compression_confidence=?""",
                         (session['project_uuid'], t.get('topic_id', ''),
-                         t.get('summary', ''), t.get('summary', '')))
+                         t.get('summary', ''), confidence, t.get('summary', ''), confidence))
 
                     for d in t.get("decisions", []):
                         user_confirmed_val = 1 if d.get("user_confirmed", False) else 0
@@ -735,6 +782,20 @@ If none match, return: {{"confirmed_ids": []}}
         conn.execute("UPDATE remora_event_queue SET status = 'processed' WHERE id = ?", (event_id,))
         conn.commit()
 
+def prune_sidecar_events():
+    """清理 Antigravity 系统分发给 Sidecar 的过剩僵尸审计日志"""
+    try:
+        events_dir = os.path.join(DATA_DIR, "events")
+        if os.path.exists(events_dir):
+            import glob
+            for f in glob.glob(os.path.join(events_dir, "*.json")):
+                try:
+                    os.remove(f)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
 def main():
     # 中文翻译：Remora 内存压缩器 V2.2
     parser = argparse.ArgumentParser(description="Remora Memory Compactor V2.2")
@@ -776,6 +837,7 @@ def main():
             import traceback
             traceback.print_exc()
         finally:
+            prune_sidecar_events()
             release_lock()
 
 if __name__ == "__main__":

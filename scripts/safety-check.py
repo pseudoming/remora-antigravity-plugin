@@ -275,6 +275,24 @@ def main():
     )
 
     # --------------------------------------------------------
+    # 针对 invoke_subagent 的强制沙盒隔离拦截
+    # --------------------------------------------------------
+    if tool_name == "invoke_subagent":
+        subagents = args.get('Subagents', [])
+        for sub in subagents:
+            t_name = sub.get('TypeName', '')
+            ws = sub.get('Workspace', 'inherit')
+            if t_name == "Remora_Deep_Diver" and ws not in ['branch', 'share']:
+                # 中文翻译：[沙盒强制隔离] 'Remora_Deep_Diver' 必须通过 Workspace='branch' 或 'share' 在隔离环境中调用。禁止在主工作区直接执行以防污染！
+                print(json.dumps({
+                    "decision": "deny",
+                    "reason": "REMORA SANDBOX ENFORCEMENT: 'Remora_Deep_Diver' MUST be invoked with Workspace='branch' or 'share'. Direct execution in the main tree is prohibited!"
+                }))
+                return
+        print(json.dumps({"decision": "allow"}))
+        return
+
+    # --------------------------------------------------------
     # 针对 view_file 的拦截
     # --------------------------------------------------------
     if tool_name == "view_file":

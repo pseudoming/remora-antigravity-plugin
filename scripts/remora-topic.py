@@ -104,6 +104,26 @@ def main():
                 print(f"Warning: No decision found with ID {args.decision_id} in project {project_uuid}.", file=sys.stderr)
             else:
                 print(f"Decision {args.decision_id} confirmed in project {project_uuid}.")
+                
+                # 方案 B: 隐式沙箱自动合并
+                print("Checking for isolated subagent sandboxes to merge...", file=sys.stderr)
+                try:
+                    import glob
+                    worktrees = glob.glob(os.path.expanduser("~/.gemini/antigravity/brain/*/.system_generated/worktrees/subagent-*"))
+                    if worktrees:
+                        # 启发式合并：取最近修改的那个工作树
+                        worktrees.sort(key=os.path.getmtime, reverse=True)
+                        latest_worktree = worktrees[0]
+                        wt_name = os.path.basename(latest_worktree)
+                        print(f"Found latest subagent sandbox: {wt_name}", file=sys.stderr)
+                        
+                        merge_script = os.path.join(os.path.dirname(__file__), "sandbox-merge.sh")
+                        # 传入 basename 即可（我们的 sh 里面有对 name 的正则寻找）
+                        subprocess.run([merge_script, wt_name], check=True)
+                    else:
+                        print("No active sandbox worktree found. Nothing to merge.", file=sys.stderr)
+                except Exception as e:
+                    print(f"Sandbox automatic merge failed: {str(e)}", file=sys.stderr)
 
     except Exception as e:
         print(f"Execution Error: {str(e)}", file=sys.stderr)
