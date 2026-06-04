@@ -14,8 +14,8 @@ class TestQualityGate(unittest.TestCase):
         generated_files = {"hooks.json", "sidecar.json", "SKILL.md"}
         
         for root, dirs, files in os.walk(self.plugin_root):
-            # Skip virtualenvs, __pycache__, and git
-            if ".git" in root or "__pycache__" in root or "node_modules" in root:
+            # Skip virtualenvs, __pycache__, git, and scratch
+            if ".git" in root or "__pycache__" in root or "node_modules" in root or "scratch" in root:
                 continue
             for file in files:
                 if file in generated_files:

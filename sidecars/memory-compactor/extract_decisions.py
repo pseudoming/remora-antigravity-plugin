@@ -25,6 +25,17 @@ MAX_EXECUTION_TIME = 300
 class AgentApiError(Exception):
     pass
 
+def get_agentapi_cmd(action, *args):
+    import shutil
+    cmd = shutil.which("agentapi")
+    if not cmd:
+        fallback = os.path.expanduser("~/.gemini/antigravity/bin/agentapi")
+        if os.path.exists(fallback):
+            cmd = fallback
+        else:
+            cmd = "agentapi"
+    return [cmd, action] + list(args)
+
 def get_or_create_conversation(prompt):
     """复用已有会话，或在没有可复用会话时创建新的"""
     excluded_ids = load_excluded_ids()
@@ -57,7 +68,7 @@ def get_or_create_conversation(prompt):
                 else:
                     try:
                         result = subprocess.check_output(
-                            ["agentapi", "send-message", conv_id, prompt],
+                            get_agentapi_cmd("send-message", conv_id, prompt),
                             stderr=subprocess.STDOUT, timeout=120)
                         return result.decode('utf-8').strip()
                     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
@@ -67,7 +78,7 @@ def get_or_create_conversation(prompt):
         current_date_str = time.strftime('%Y-%m-%d', time.localtime())
         init_prompt = f"# Remora Memory Compactor ({current_date_str})\n\n" + prompt
         result = subprocess.check_output(
-            ["agentapi", "new-conversation", init_prompt],
+            get_agentapi_cmd("new-conversation", init_prompt),
             stderr=subprocess.STDOUT, timeout=120)
         output = result.decode('utf-8').strip()
 
