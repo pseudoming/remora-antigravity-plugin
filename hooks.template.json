@@ -1,3 +1,82 @@
 {
-
+  "remora": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/zombie-detector.py",
+        "timeout": 10
+      },
+      {
+        "type": "command",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/snapshot-git.py",
+        "timeout": 15
+      },
+      {
+        "type": "command",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/session-guardian.py",
+        "timeout": 10
+      },
+      {
+        "type": "command",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/tone-injector.py",
+        "timeout": 10
+      },
+      {
+        "type": "command",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/cognitive-push.py --stage=pre-invoke",
+        "timeout": 10
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{PYTHON} {PLUGIN_ROOT}/scripts/zombie-detector.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "run_command|view_file|grep_search|write_to_file|multi_replace_file_content|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{PYTHON} {PLUGIN_ROOT}/scripts/safety-check.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "write_to_file|multi_replace_file_content|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{PYTHON} {PLUGIN_ROOT}/scripts/cognitive-push.py --stage=pre-tool",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostInvocation": [
+      {
+        "type": "command",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/action-gate.py",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "{PYTHON} {PLUGIN_ROOT}/sidecars/memory-compactor/compactor.py --event-driven",
+        "timeout": 15
+      },
+      {
+        "type": "command",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/clean-session-stats.py",
+        "timeout": 5
+      }
+    ]
+  }
 }
