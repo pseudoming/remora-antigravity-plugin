@@ -26,20 +26,28 @@ def save_excluded_ids(ids):
 def get_project_id(conv_id):
     """通过 agentapi 获取这个会话的真实 projectId"""
     import shutil
-    if not shutil.which("agentapi"):
-        return "unknown"
+    default_mock_id = "11111111-1111-1111-1111-111111111111"
+    
+    cmd = shutil.which("agentapi")
+    if not cmd:
+        fallback = os.path.expanduser("~/.gemini/antigravity/bin/agentapi")
+        if os.path.exists(fallback):
+            cmd = fallback
+        else:
+            return default_mock_id
+            
     try:
         result = subprocess.check_output(
-            ["agentapi", "get-conversation-metadata", conv_id],
+            [cmd, "get-conversation-metadata", conv_id],
             stderr=subprocess.STDOUT, timeout=10)
         data = json.loads(result.decode('utf-8'))
         project_id = (data.get("response", {})
             .get("conversationMetadata", {})
             .get("metadata", {})
             .get("projectId", ""))
-        return project_id if project_id else "unknown"
+        return project_id if project_id else default_mock_id
     except Exception:
-        return "unknown"
+        return default_mock_id
 
 def get_active_conversations():
     """扫描 brain 目录，获取最近 48 小时内有活动的会话

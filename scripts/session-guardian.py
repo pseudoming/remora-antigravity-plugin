@@ -150,7 +150,7 @@ def main(context):
                     
                     # 彻底放宽拦截类型捕获各种格式的消息体，但严格排除系统自身的大型历史汇总记录
                     if step_type not in ["CONVERSATION_HISTORY", "CHECKPOINT"]:
-                        # 精确匹配本子代理的活跃，且排除主会话自己物理命令/文件读写/子特工状态查询所产生的带有 UUID 的输出干扰
+                        # 精确匹配本子代理的活跃，且排除主会话自己物理命令/文件读写/subagent状态查询所产生的带有 UUID 的输出干扰
                         if subagent_uuid in step_str and not any(cmd in step_str for cmd in ["run_command", "view_file", "grep_search", "manage_subagents"]):
                             latest_subagent_activity_index = idx
                             break
