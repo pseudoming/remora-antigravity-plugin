@@ -99,17 +99,20 @@ def read_incremental_logs(conn, session):
             "DELETE FROM remora_event_queue WHERE project_uuid=? AND status='pending'",
             (session['project_uuid'],))
         # 物理水位线同步回滚更新：确保即使程序在后续阶段崩溃，自愈后的水位线也能在数据库中持久化
+        cursor = conn.execute("SELECT id FROM messages WHERE conversation_id=? AND line_number=?", (session['conversation_id'], target_rollback_line))
+        row = cursor.fetchone()
+        target_msg_id = row[0] if row else 0
         conn.execute(
-            "UPDATE watermarks SET last_line_processed=? WHERE project_uuid=? AND conversation_id=?",
-            (target_rollback_line, session['project_uuid'], session['conversation_id']))
+            "UPDATE watermarks SET last_line_processed=?, last_msg_id=? WHERE project_uuid=? AND conversation_id=?",
+            (target_rollback_line, target_msg_id, session['project_uuid'], session['conversation_id']))
             
         print(f"[Remora] 检测到会话 Undo 回滚，温存储已自愈水位线至行号: {target_rollback_line}")
         last_line = target_rollback_line
 
     if not row:
         conn.execute(
-            "INSERT INTO watermarks (project_uuid, conversation_id, last_line_processed) VALUES (?, ?, ?)",
-            (session['project_uuid'], session['conversation_id'], 0))
+            "INSERT INTO watermarks (project_uuid, conversation_id, last_line_processed, last_msg_id) VALUES (?, ?, ?, ?)",
+            (session['project_uuid'], session['conversation_id'], 0, 0))
 
     # 提取核心内容（只取 USER_INPUT + MODEL 产出）
     key_content, _ = extract_key_content(session['transcript_path'], last_line)

@@ -1,0 +1,177 @@
+import os
+import sys
+import sqlite3
+import pytest
+import json
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'sidecars', 'memory-compactor')))
+
+import lib.dao as dao
+
+TEST_DB_PATH = "/tmp/test_remora_dual_write.db"
+TEST_JSONL = "/tmp/test_transcript.jsonl"
+
+@pytest.fixture(autouse=True)
+def setup_db(monkeypatch):
+    monkeypatch.setattr(dao, "get_db_path", lambda: TEST_DB_PATH)
+    import schema_init
+    monkeypatch.setattr(schema_init, "DB_PATH", TEST_DB_PATH)
+    monkeypatch.setattr(schema_init, "DATA_DIR", "/tmp")
+
+    if os.path.exists(TEST_DB_PATH):
+        os.remove(TEST_DB_PATH)
+    if os.path.exists(TEST_JSONL):
+        os.remove(TEST_JSONL)
+        
+    from contextlib import closing
+    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+        with conn:
+            conn.executescript("""
+                CREATE TABLE session_state (
+                    session_id TEXT PRIMARY KEY,
+                    mode TEXT DEFAULT 'standard',
+                    is_cold_start INTEGER DEFAULT 1,
+                    updated_at DATETIME
+                );
+                CREATE TABLE watermarks (
+                    conversation_id TEXT PRIMARY KEY,
+                    project_uuid TEXT,
+                    last_line_processed INTEGER DEFAULT 0,
+                    last_msg_id INTEGER DEFAULT 0,
+                    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE project_topics (
+                    uuid TEXT,
+                    topic_id TEXT,
+                    status TEXT DEFAULT 'open',
+                    summary TEXT,
+                    source TEXT DEFAULT 'auto',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    last_accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    compression_confidence REAL DEFAULT 1.0,
+                    associated_files TEXT,
+                    referenced_files TEXT,
+                    PRIMARY KEY(uuid, topic_id)
+                );
+                CREATE TABLE topic_decisions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_uuid TEXT,
+                    topic_id TEXT,
+                    conversation_id TEXT,
+                    decision TEXT,
+                    rationale TEXT,
+                    associated_files TEXT,
+                    evidence_msg_ids TEXT,
+                    evidence_msg_db_ids TEXT,
+                    user_confirmed INTEGER DEFAULT 0,
+                    created_at_line INTEGER DEFAULT 0,
+                    created_at_msg_id INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversation_id TEXT,
+                    topic_id TEXT,
+                    role TEXT,
+                    content TEXT,
+                    line_number INTEGER,
+                    timestamp DATETIME
+                );
+            """)
+
+    yield
+    
+    if os.path.exists(TEST_DB_PATH):
+        os.remove(TEST_DB_PATH)
+    if os.path.exists(TEST_JSONL):
+        os.remove(TEST_JSONL)
+
+
+def test_compactor_dual_write():
+    # Write some logs
+    with open(TEST_JSONL, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"type": "USER_INPUT", "source": "user", "content": "Hello", "timestamp": "2026-06-04T12:00:00Z"}) + "\n")
+        f.write(json.dumps({"type": "PLANNER_RESPONSE", "source": "agent", "content": "Hi", "timestamp": "2026-06-04T12:00:01Z"}) + "\n")
+    
+    # Run read_transcript
+    import read_transcript
+    session = {
+        'project_uuid': 'p1',
+        'conversation_id': 'c1',
+        'transcript_path': TEST_JSONL
+    }
+    
+    with sqlite3.connect(TEST_DB_PATH) as conn:
+        key_content, current_line, last_line = read_transcript.read_incremental_logs(conn, session)
+        
+        # Verify messages table populated
+        messages = conn.execute("SELECT id, line_number FROM messages").fetchall()
+        assert len(messages) == 2
+        assert messages[0][1] == 1
+        assert messages[1][1] == 2
+        
+        # Verify dual write on watermarks table
+        watermarks = conn.execute("SELECT last_line_processed, last_msg_id FROM watermarks WHERE conversation_id='c1'").fetchall()
+        # In read_transcript, it initially sets it to 0,0, wait, but where does it update it?
+        # extract_decisions updates it to current_line!
+        assert watermarks[0] == (0, 0)
+    
+        # Mock LLM data mapping back
+        # Let's mock a decision using line 1
+        d = {
+            'decision': 'd1',
+            'rationale': 'r1',
+            'evidence_msg_ids': [1]
+        }
+        t = {
+            'topic_id': 't1',
+            'summary': 's1',
+            'decisions': [d]
+        }
+        
+        # Run the dual write snippet directly since extract_decisions invokes LLM
+        evidence_msg_db_ids = []
+        for line_num in d.get('evidence_msg_ids', []):
+            cursor = conn.execute("SELECT id FROM messages WHERE conversation_id=? AND line_number=?", (session['conversation_id'], line_num))
+            row = cursor.fetchone()
+            if row:
+                evidence_msg_db_ids.append(row[0])
+
+        cursor = conn.execute("SELECT id FROM messages WHERE conversation_id=? AND line_number=?", (session['conversation_id'], current_line))
+        row = cursor.fetchone()
+        created_at_msg_id = row[0] if row else 0
+
+        conn.execute(
+            """INSERT INTO topic_decisions
+               (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, evidence_msg_db_ids, user_confirmed, created_at_line, created_at_msg_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session['project_uuid'], t.get('topic_id', ''),
+             session['conversation_id'], d.get('decision', ''),
+             d.get('rationale', ''),
+             json.dumps(d.get('evidence_msg_ids', [])),
+             json.dumps(evidence_msg_db_ids),
+             0,
+             current_line,
+             created_at_msg_id))
+             
+        # Also update watermark
+        cursor = conn.execute("SELECT id FROM messages WHERE conversation_id=? AND line_number=?", (session['conversation_id'], current_line))
+        row = cursor.fetchone()
+        last_msg_id = row[0] if row else 0
+        conn.execute(
+            "UPDATE watermarks SET last_line_processed=?, last_msg_id=?, last_updated=CURRENT_TIMESTAMP WHERE project_uuid=? AND conversation_id=?",
+            (current_line, last_msg_id, session['project_uuid'], session['conversation_id']))
+            
+        conn.commit()
+
+        # Final assertion on dual write
+        decisions = conn.execute("SELECT evidence_msg_ids, evidence_msg_db_ids, created_at_line, created_at_msg_id FROM topic_decisions").fetchall()
+        assert len(decisions) == 1
+        assert decisions[0][0] == "[1]"  # old array
+        assert decisions[0][1] == "[1]"  # new array (message ID)
+        assert decisions[0][2] == 2      # old line number
+        assert decisions[0][3] == 2      # new message ID
+
+        watermarks = conn.execute("SELECT last_line_processed, last_msg_id FROM watermarks WHERE conversation_id='c1'").fetchall()
+        assert watermarks[0] == (2, 2)
