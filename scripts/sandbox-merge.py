@@ -8,8 +8,8 @@ def main():
         
     subagent_id = sys.argv[1]
     
-    # 模拟 bash: ls -d /home/agent/.gemini/antigravity/brain/*/.system_generated/worktrees/*$SUBAGENT_CONV_ID* | head -n 1
-    pattern = f"/home/agent/.gemini/antigravity/brain/*/.system_generated/worktrees/*{subagent_id}*"
+    # 模拟 bash: ls -d ~/.gemini/antigravity/brain/*/.system_generated/worktrees/*$SUBAGENT_CONV_ID* | head -n 1
+    pattern = os.path.expanduser(f"~/.gemini/antigravity/brain/*/.system_generated/worktrees/*{subagent_id}*")
     matches = glob.glob(pattern)
     
     if not matches:

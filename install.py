@@ -8,26 +8,20 @@ import glob
 import stat
 import urllib.parse
 
-def render_template(file_path, plugin_root):
-    if not os.path.exists(file_path):
+def render_template(src_path, dst_path, plugin_root):
+    if not os.path.exists(src_path):
         return
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(src_path, 'r', encoding='utf-8') as f:
         content = f.read()
-    changed = False
-    if '{PLUGIN_ROOT}' in content:
-        content = content.replace('{PLUGIN_ROOT}', plugin_root)
-        changed = True
-    if '{PLUGIN_ROOT_URI}' in content:
-        content = content.replace('{PLUGIN_ROOT_URI}', urllib.parse.quote(plugin_root, safe='/'))
-        changed = True
-    if '{PYTHON}' in content:
-        content = content.replace('{PYTHON}', sys.executable)
-        changed = True
     
-    if changed:
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print(f"Rendered template: {file_path}")
+    content = content.replace('{PLUGIN_ROOT}', plugin_root)
+    content = content.replace('{PLUGIN_ROOT_URI}', urllib.parse.quote(plugin_root, safe='/'))
+    content = content.replace('{PYTHON}', sys.executable)
+    
+    with open(dst_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    print(f"Rendered template: {dst_path}")
+
 def main():
     plugin_root = os.path.abspath(os.path.dirname(__file__))
     if os.access(plugin_root, os.W_OK):
@@ -39,21 +33,29 @@ def main():
 
     print(f"Installing Remora Plugin at {plugin_root}...")
 
+    # 0. 质量门禁校验 (Quality Gate)
+    print("Running Quality Gate static checks...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "unittest", "scripts.tests.test_quality_gate"], cwd=plugin_root)
+    except subprocess.CalledProcessError:
+        print("❌ [FATAL] Quality Gate failed! The plugin codebase violates architecture rules (e.g., hardcoded absolute paths, unsafe reads).", file=sys.stderr)
+        print("Installation aborted.", file=sys.stderr)
+        sys.exit(1)
+
     # 1. 建立数据与运行时目录
     os.makedirs(runtime_dir, exist_ok=True)
     
-
-    
     # 2. 模板渲染: agents, workflows, hooks.json, SKILL.md
-    render_template(os.path.join(plugin_root, "hooks.json"), plugin_root)
-    render_template(os.path.join(plugin_root, "sidecars", "memory-compactor", "sidecar.json"), plugin_root)
-    render_template(os.path.join(plugin_root, "skills", "remora-architecture", "SKILL.md"), plugin_root)
+    render_template(os.path.join(plugin_root, "hooks.template.json"), os.path.join(plugin_root, "hooks.json"), plugin_root)
+    render_template(os.path.join(plugin_root, "sidecars", "memory-compactor", "sidecar.template.json"), os.path.join(plugin_root, "sidecars", "memory-compactor", "sidecar.json"), plugin_root)
+    render_template(os.path.join(plugin_root, "skills", "remora-architecture", "SKILL.template.md"), os.path.join(plugin_root, "skills", "remora-architecture", "SKILL.md"), plugin_root)
     
     agents_dir = os.path.join(plugin_root, "agents")
     if os.path.exists(agents_dir):
         for agent_file in os.listdir(agents_dir):
-            if agent_file.endswith(".json"):
-                render_template(os.path.join(agents_dir, agent_file), plugin_root)
+            if agent_file.endswith(".template.json"):
+                dst_file = agent_file.replace(".template.json", ".json")
+                render_template(os.path.join(agents_dir, agent_file), os.path.join(agents_dir, dst_file), plugin_root)
                 
     workflows_dir = os.path.join(plugin_root, "global_workflows")
     if os.path.exists(workflows_dir):

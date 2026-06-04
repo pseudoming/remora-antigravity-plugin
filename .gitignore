@@ -10,3 +10,8 @@ compactor.lock
 context_dump.json
 scratch/
 artifacts/
+hooks.json
+sidecars/memory-compactor/sidecar.json
+skills/remora-architecture/SKILL.md
+agents/*.json
+!agents/*.template.json

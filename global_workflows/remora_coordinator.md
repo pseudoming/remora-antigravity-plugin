@@ -14,7 +14,7 @@ description: 当面临长链路调试、深水区排查或大型重构时，主 
 
 ## 2. 物理沙盒隔离与分流 (Sandbox Execution & Dispatch)
 **禁止直接执行**：严禁在主工作区亲自下场运行测试或调试代码。主 Agent 必须使用 `invoke_subagent` 委派只读特工 `Remora_ReadOnly_Extractor`（Scenario A）或隔离特工 `Remora_Deep_Diver`（Scenario B，必须配置 `Workspace: "branch/share"` 工作区）。
-> 💡 关于隔离级别、底线拦截规则、卡死心跳探活与双重自愈机制的具体指令技术细节，必须严格遵循 [/skills/remora-architecture/SKILL.md](file:///home/agent/.gemini/config/plugins/remora-plugin/skills/remora-architecture/SKILL.md) 规范。
+> 💡 关于隔离级别、底线拦截规则、卡死心跳探活与双重自愈机制的具体指令技术细节，必须严格遵循 [/skills/remora-architecture/SKILL.md](file://{PLUGIN_ROOT}/skills/remora-architecture/SKILL.md) 规范。
 
 ## 3. 决策锚定与打标 (Decision Anchoring & Confirmation)
 **Single Source of Truth**：SQLite 数据库 remora_memory.db 是决策的唯一真相源。严禁在主干或工作区手动写入 decisions.md 等物理文件。
