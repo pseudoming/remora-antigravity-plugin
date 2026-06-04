@@ -74,3 +74,50 @@ def init_db():
                 conn.execute("SELECT last_msg_id FROM watermarks LIMIT 1")
             except sqlite3.OperationalError:
                 conn.execute("ALTER TABLE watermarks ADD COLUMN last_msg_id INTEGER DEFAULT 0")
+
+            # Phase 33: 单轨 ID 无损迁移与重构 (Table Remodeling)
+            try:
+                cursor = conn.execute("PRAGMA table_info(topic_decisions)")
+                columns = [row[1] for row in cursor.fetchall()]
+                if "evidence_msg_db_ids" in columns:
+                    # 1. 物理新建临时表
+                    conn.execute("""
+                        CREATE TABLE IF NOT EXISTS topic_decisions_new (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            project_uuid TEXT NOT NULL,
+                            topic_id TEXT NOT NULL,
+                            conversation_id TEXT NOT NULL,
+                            decision TEXT NOT NULL,
+                            rationale TEXT NOT NULL,
+                            evidence_msg_ids TEXT,
+                            user_confirmed INTEGER DEFAULT 0,
+                            created_at_line INTEGER DEFAULT 0,
+                            created_at_msg_id INTEGER DEFAULT 0,
+                            decision_type TEXT DEFAULT 'approved',
+                            associated_files TEXT DEFAULT '[]',
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY(project_uuid, topic_id) REFERENCES project_topics(uuid, topic_id)
+                        )
+                    """)
+                    
+                    # 2. 数据迁移：将旧过渡列 evidence_msg_db_ids 的主键ID合并写入新表的单轨 evidence_msg_ids 列中
+                    conn.execute("""
+                        INSERT INTO topic_decisions_new (
+                            id, project_uuid, topic_id, conversation_id, decision, rationale,
+                            evidence_msg_ids, user_confirmed, created_at_line, created_at_msg_id, decision_type,
+                            associated_files, created_at, updated_at
+                        )
+                        SELECT 
+                            id, project_uuid, topic_id, conversation_id, decision, rationale,
+                            COALESCE(evidence_msg_db_ids, evidence_msg_ids), user_confirmed, created_at_line, COALESCE(created_at_msg_id, 0), decision_type,
+                            associated_files, created_at, updated_at
+                        FROM topic_decisions
+                    """)
+                    
+                    # 3. 表的物理更替
+                    conn.execute("DROP TABLE topic_decisions")
+                    conn.execute("ALTER TABLE topic_decisions_new RENAME TO topic_decisions")
+                    print("[Remora] Database migrated to single-track ID (evidence_msg_ids) successfully.")
+            except Exception as me:
+                print(f"Error during single-track migration: {str(me)}", file=sys.stderr)

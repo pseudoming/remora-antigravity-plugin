@@ -54,7 +54,6 @@ def setup_db(monkeypatch):
                     rationale TEXT,
                     associated_files TEXT,
                     evidence_msg_ids TEXT,
-                    evidence_msg_db_ids TEXT,
                     user_confirmed INTEGER DEFAULT 0,
                     created_at_line INTEGER DEFAULT 0,
                     created_at_msg_id INTEGER DEFAULT 0,
@@ -139,11 +138,11 @@ def test_decision_operations():
                 INSERT INTO messages (id, conversation_id, content) VALUES (1, 'c1', 'Evidence for python');
                 INSERT INTO messages (id, conversation_id, content) VALUES (2, 'c1', 'Evidence for rust');
 
-                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, associated_files, evidence_msg_db_ids, evidence_msg_ids)
-                VALUES ('proj_1', 'topic_A', 'Use python', 'It is fast to write', 1, '[{"file": "main.py"}]', '[1]', '[999]');
+                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, associated_files, evidence_msg_ids)
+                VALUES ('proj_1', 'topic_A', 'Use python', 'It is fast to write', 1, '[{"file": "main.py"}]', '[1]');
             
-                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, associated_files, evidence_msg_db_ids, evidence_msg_ids)
-                VALUES ('proj_1', 'topic_A', 'Use rust', 'It is memory safe', 0, '[{"file": "main.rs"}]', '[2]', '[888]');
+                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, associated_files, evidence_msg_ids)
+                VALUES ('proj_1', 'topic_A', 'Use rust', 'It is memory safe', 0, '[{"file": "main.rs"}]', '[2]');
             """)
         
     decisions = dao.get_confirmed_decisions("proj_1", "topic_A")
@@ -164,7 +163,7 @@ def test_fts5_recall_operations():
                 INSERT INTO messages (id, conversation_id, topic_id, role, content) VALUES (1, 'conv_1', 'topic_A', 'user', 'hello world 202606606');
                 INSERT INTO messages_fts (rowid, content) VALUES (1, 'hello world 202606606');
             
-                INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale, evidence_msg_db_ids) 
+                INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale, evidence_msg_ids) 
                 VALUES ('proj_1', 'conv_1', 'topic_A', 'Log correctly', 'Need logs to debug 202606606', '[1]');
             """)
 

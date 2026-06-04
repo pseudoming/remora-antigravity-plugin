@@ -61,7 +61,6 @@ def setup_db(monkeypatch):
                     rationale TEXT,
                     associated_files TEXT,
                     evidence_msg_ids TEXT,
-                    evidence_msg_db_ids TEXT,
                     user_confirmed INTEGER DEFAULT 0,
                     created_at_line INTEGER DEFAULT 0,
                     created_at_msg_id INTEGER DEFAULT 0,
@@ -127,13 +126,8 @@ def test_compactor_dual_write(monkeypatch):
             'decisions': [d]
         }
         
-        # Run the dual write snippet directly since extract_decisions invokes LLM
-        evidence_msg_db_ids = []
-        for line_num in d.get('evidence_msg_ids', []):
-            cursor = conn.execute("SELECT id FROM messages WHERE conversation_id=? AND line_number=?", (session['conversation_id'], line_num))
-            row = cursor.fetchone()
-            if row:
-                evidence_msg_db_ids.append(row[0])
+        # Run the single-track snippet directly since extract_decisions invokes LLM
+        evidence_msg_ids = d.get('evidence_msg_ids', [])
 
         cursor = conn.execute("SELECT id FROM messages WHERE conversation_id=? AND line_number=?", (session['conversation_id'], current_line))
         row = cursor.fetchone()
@@ -141,13 +135,12 @@ def test_compactor_dual_write(monkeypatch):
 
         conn.execute(
             """INSERT INTO topic_decisions
-               (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, evidence_msg_db_ids, user_confirmed, created_at_line, created_at_msg_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, user_confirmed, created_at_line, created_at_msg_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (session['project_uuid'], t.get('topic_id', ''),
              session['conversation_id'], d.get('decision', ''),
              d.get('rationale', ''),
-             json.dumps(d.get('evidence_msg_ids', [])),
-             json.dumps(evidence_msg_db_ids),
+             json.dumps(evidence_msg_ids),
              0,
              current_line,
              created_at_msg_id))
@@ -162,13 +155,12 @@ def test_compactor_dual_write(monkeypatch):
             
         conn.commit()
 
-        # Final assertion on dual write
-        decisions = conn.execute("SELECT evidence_msg_ids, evidence_msg_db_ids, created_at_line, created_at_msg_id FROM topic_decisions").fetchall()
+        # Final assertion on single-track ID
+        decisions = conn.execute("SELECT evidence_msg_ids, created_at_line, created_at_msg_id FROM topic_decisions").fetchall()
         assert len(decisions) == 1
-        assert decisions[0][0] == "[1]"  # old array
-        assert decisions[0][1] == "[1]"  # new array (message ID)
-        assert decisions[0][2] == 2      # old line number
-        assert decisions[0][3] == 2      # new message ID
+        assert decisions[0][0] == "[1]"  # single-track array (message ID)
+        assert decisions[0][1] == 2      # old line number
+        assert decisions[0][2] == 2      # new message ID
 
         watermarks = conn.execute("SELECT last_line_processed, last_msg_id FROM watermarks WHERE conversation_id='c1'").fetchall()
         assert watermarks[0] == (2, 2)

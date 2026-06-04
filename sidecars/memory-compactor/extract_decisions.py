@@ -69,10 +69,13 @@ def get_or_create_conversation(prompt):
                         pass
                 else:
                     try:
-                        result = subprocess.check_output(
+                        subprocess.check_output(
                             get_agentapi_cmd("send-message", conv_id, prompt),
                             env=sub_env, stderr=subprocess.STDOUT, timeout=120)
-                        return result.decode('utf-8').strip()
+                        
+                        # 核心重构：从 Mock 会话数据库中直连读取未转义的最新明文回复
+                        reply = cdal.get_latest_planner_response()
+                        return reply if reply else ""
                     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                         raise AgentApiError(f"Fail-Fast: send-message failed. Abandoning execution. Error: {e}")
 
@@ -84,6 +87,7 @@ def get_or_create_conversation(prompt):
             env=sub_env, stderr=subprocess.STDOUT, timeout=120)
         output = result.decode('utf-8').strip()
 
+        reply = ""
         try:
             resp = json.loads(output)
             new_conv_id = (resp.get('response', {})
@@ -94,10 +98,15 @@ def get_or_create_conversation(prompt):
                     f.write(new_conv_id)
                 excluded_ids.add(new_conv_id)
                 save_excluded_ids(excluded_ids)
+                
+                # 核心重构：从 newConversation 中提取明文 reply
+                reply = (resp.get('response', {})
+                    .get('newConversation', {})
+                    .get('reply', ''))
         except json.JSONDecodeError:
             pass
 
-        return output
+        return reply if reply else output
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         raise AgentApiError(f"Fail-Fast: new-conversation failed. Abandoning execution. Error: {e}")
 
@@ -285,7 +294,7 @@ You MUST output this exact timestamp on the first line before your JSON markdown
 [Sync Finished: {current_time_str}]
 
 You are an expert Architecture Decision Record (ADR) extractor.
-Analyze the following conversation snippets and extract all key topics.
+Analyze the following conversation snippets and extract all key topics. You MUST extract AT MOST 1 key topic and AT MOST 1 decision. Keep your response extremely brief (less than 100 words total) to avoid truncation.
 
 You MUST output ONLY a valid JSON object matching this schema:
 {{
@@ -345,19 +354,8 @@ If no significant topics, output: {{"topics": []}}
                     for d in t.get("decisions", []):
                         user_confirmed_val = 1 if d.get("user_confirmed", False) else 0
                         
-                        # LLM now natively returns messages.id
-                        evidence_msg_db_ids = d.get('evidence_msg_ids', [])
-                        
-                        # Fallback for old columns
-                        evidence_msg_ids = []
-                        for msg_id in evidence_msg_db_ids:
-                            try:
-                                cursor = conn.execute("SELECT line_number FROM messages WHERE id=?", (int(msg_id),))
-                                row = cursor.fetchone()
-                                if row:
-                                    evidence_msg_ids.append(row[0])
-                            except (ValueError, TypeError):
-                                pass
+                        # LLM natively returns messages.id in 'evidence_msg_ids'
+                        evidence_msg_ids = d.get('evidence_msg_ids', [])
 
                         created_at_msg_id = current_msg_id
                         cursor = conn.execute("SELECT line_number FROM messages WHERE id=?", (created_at_msg_id,))
@@ -366,13 +364,12 @@ If no significant topics, output: {{"topics": []}}
 
                         conn.execute(
                             """INSERT INTO topic_decisions
-                               (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, evidence_msg_db_ids, user_confirmed, created_at_line, created_at_msg_id)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                               (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, user_confirmed, created_at_line, created_at_msg_id)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (session['project_uuid'], t.get('topic_id', ''),
                              session['conversation_id'], d.get('decision', ''),
                              d.get('rationale', ''),
                              json.dumps(evidence_msg_ids),
-                             json.dumps(evidence_msg_db_ids),
                              user_confirmed_val,
                              created_at_line,
                              created_at_msg_id))
