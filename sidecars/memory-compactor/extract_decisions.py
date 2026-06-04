@@ -39,6 +39,8 @@ def get_agentapi_cmd(action, *args):
 def get_or_create_conversation(prompt):
     """复用已有会话，或在没有可复用会话时创建新的"""
     excluded_ids = load_excluded_ids()
+    sub_env = os.environ.copy()
+    sub_env["ANTIGRAVITY_PROJECT_ID"] = "11111111-1111-1111-1111-111111111111"
 
     if os.path.exists(CONV_MARKER_FILE):
         with open(CONV_MARKER_FILE, 'r') as f:
@@ -69,7 +71,7 @@ def get_or_create_conversation(prompt):
                     try:
                         result = subprocess.check_output(
                             get_agentapi_cmd("send-message", conv_id, prompt),
-                            stderr=subprocess.STDOUT, timeout=120)
+                            env=sub_env, stderr=subprocess.STDOUT, timeout=120)
                         return result.decode('utf-8').strip()
                     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                         raise AgentApiError(f"Fail-Fast: send-message failed. Abandoning execution. Error: {e}")
@@ -79,7 +81,7 @@ def get_or_create_conversation(prompt):
         init_prompt = f"# Remora Memory Compactor ({current_date_str})\n\n" + prompt
         result = subprocess.check_output(
             get_agentapi_cmd("new-conversation", init_prompt),
-            stderr=subprocess.STDOUT, timeout=120)
+            env=sub_env, stderr=subprocess.STDOUT, timeout=120)
         output = result.decode('utf-8').strip()
 
         try:

@@ -270,17 +270,18 @@ class TestScanSessions(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir)
 
-    def test_get_project_id_from_env(self):
+    def test_get_project_id_no_env_override(self):
         import scan_sessions
         from unittest.mock import patch
         
-        # Test case 1: when ANTIGRAVITY_PROJECT_ID is present in environment
+        # Test case 1: Even when ANTIGRAVITY_PROJECT_ID is present, get_project_id should ignore it
+        # and search via agentapi (falling back to Mock UUID if agentapi doesn't exist)
         with patch.dict(os.environ, {"ANTIGRAVITY_PROJECT_ID": "my-custom-project-id"}):
-            project_id = scan_sessions.get_project_id("any-conv-id")
-            self.assertEqual(project_id, "my-custom-project-id")
+            with patch("shutil.which", return_value=None):
+                project_id = scan_sessions.get_project_id("any-conv-id")
+                self.assertEqual(project_id, "11111111-1111-1111-1111-111111111111")
             
-        # Test case 2: when ANTIGRAVITY_PROJECT_ID is NOT present
-        # It should fall back to agentapi or default_mock_id (since we are mocking agentapi not to exist)
+        # Test case 2: Standard fallback behavior when agentapi doesn't exist
         with patch.dict(os.environ, {}, clear=False):
             if "ANTIGRAVITY_PROJECT_ID" in os.environ:
                 del os.environ["ANTIGRAVITY_PROJECT_ID"]
