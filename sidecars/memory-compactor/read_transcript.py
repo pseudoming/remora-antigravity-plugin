@@ -21,8 +21,8 @@ def format_timestamp(ts_str):
     ts_str = ts_str.replace('T', ' ').replace('Z', '')
     return ts_str[:19]
 
-def extract_key_content(transcript_path, start_line):
-    """按行解析 JSONL，只提取 USER_INPUT 和 PLANNER_RESPONSE 的核心内容并附带物理行号"""
+def extract_key_content(transcript_path, last_line, line_to_msg_id):
+    """按行解析 JSONL，提取核心内容并附带数据库原生的 msg_id"""
     key_content = []
     current_line = 0
     total_length = 0
@@ -30,7 +30,7 @@ def extract_key_content(transcript_path, start_line):
     with open(transcript_path, 'r', encoding='utf-8') as f:
         for line in f:
             current_line += 1
-            if current_line <= start_line:
+            if current_line <= last_line:
                 continue
             try:
                 obj = json.loads(line)
@@ -38,29 +38,36 @@ def extract_key_content(transcript_path, start_line):
                 content = obj.get('content', '')
                 if not content:
                     continue
-                # 注入 [line_xxx] 前缀以向 LLM 物理透传行号，保障证据精准回链
+                # 注入 [msg_xxx] 前缀，向 LLM 物理透传 messages.id
                 if step_type in ('USER_INPUT', 'PLANNER_RESPONSE'):
-                    snippet = f"[line_{current_line}] {content[:500]}"
-                    key_content.append(snippet)
-                    total_length += len(snippet)
-                    if total_length >= MAX_PROMPT_LENGTH:
-                        break
+                    msg_id = line_to_msg_id.get(current_line)
+                    if msg_id is not None:
+                        snippet = f"[msg_{msg_id}] {content[:500]}"
+                        key_content.append(snippet)
+                        total_length += len(snippet)
+                        if total_length >= MAX_PROMPT_LENGTH:
+                            break
             except json.JSONDecodeError:
                 continue
 
-    return "\n".join(key_content), current_line
+    return "\n".join(key_content)
 
 def read_incremental_logs(conn, session):
     """利用 SQLite 水位线进行增量读取，并将原日志叙写存入 messages 表"""
     is_sub = is_subagent_session(session['transcript_path'])
     
     cursor = conn.execute(
-        "SELECT last_line_processed FROM watermarks WHERE project_uuid=? AND conversation_id=?",
+        "SELECT last_msg_id FROM watermarks WHERE project_uuid=? AND conversation_id=?",
         (session['project_uuid'], session['conversation_id']))
-    row = cursor.fetchone()
-    last_line = row[0] if row else 0
+    watermark_row = cursor.fetchone()
+    last_msg_id = watermark_row[0] if watermark_row else 0
 
-    # 持运行 JSONL 写入 messages 表（供FTS5全文检索用）
+    # Derive last physical line from messages table to avoid reading from start
+    cursor = conn.execute("SELECT MAX(line_number) FROM messages WHERE conversation_id=?", (session['conversation_id'],))
+    max_line_row = cursor.fetchone()
+    last_line = max_line_row[0] if max_line_row and max_line_row[0] else 0
+
+    # 持续运行 JSONL 写入 messages 表
     current_line = 0
     with open(session['transcript_path'], 'r', encoding='utf-8') as f:
         for line in f:
@@ -70,7 +77,6 @@ def read_incremental_logs(conn, session):
                     log_obj = json.loads(line)
                     step_type = log_obj.get('type', '')
                     
-                    # 子代理会话仅录入交互与推理，彻底抛弃 TOOL_OUTPUT (历史副本)
                     if is_sub and step_type not in ('USER_INPUT', 'PLANNER_RESPONSE'):
                         continue
                         
@@ -84,37 +90,45 @@ def read_incremental_logs(conn, session):
 
     # 逆缩（Undo）自愈拦截线
     if current_line < last_line:
-        # 时序重合对齐边界：后退至 current_line - 1 行（即 t-1 轮）
-        # 确保下一次增量扫描能够将回滚分界线边缘的最后一条用户输入（第 t 行）
-        # 与重新生成的回答一同带入 LLM 提取上下文，避免因果关系断裂导致的漏提
         target_rollback_line = max(0, current_line - 1)
+        
+        # Get target_msg_id safely by looking for the MAX(id) <= target_rollback_line
+        cursor = conn.execute("SELECT MAX(id) FROM messages WHERE conversation_id=? AND line_number<=?", (session['conversation_id'], target_rollback_line))
+        msg_row = cursor.fetchone()
+        target_msg_id = msg_row[0] if msg_row and msg_row[0] is not None else 0
+        
         conn.execute(
             "DELETE FROM messages WHERE conversation_id=? AND line_number > ?",
             (session['conversation_id'], target_rollback_line))
         conn.execute(
-            "DELETE FROM topic_decisions WHERE conversation_id=? AND created_at_line > ?",
-            (session['conversation_id'], target_rollback_line))
-        # 撤销事件一致性大扫除：若发生 Undo 回滚，一并清空事件队列中该项目未消费的 pending 事件，防范跨 Undo 误打标
+            "DELETE FROM topic_decisions WHERE conversation_id=? AND created_at_msg_id > ?",
+            (session['conversation_id'], target_msg_id))
         conn.execute(
             "DELETE FROM remora_event_queue WHERE project_uuid=? AND status='pending'",
             (session['project_uuid'],))
-        # 物理水位线同步回滚更新：确保即使程序在后续阶段崩溃，自愈后的水位线也能在数据库中持久化
-        cursor = conn.execute("SELECT id FROM messages WHERE conversation_id=? AND line_number=?", (session['conversation_id'], target_rollback_line))
-        row = cursor.fetchone()
-        target_msg_id = row[0] if row else 0
-        conn.execute(
-            "UPDATE watermarks SET last_line_processed=?, last_msg_id=? WHERE project_uuid=? AND conversation_id=?",
-            (target_rollback_line, target_msg_id, session['project_uuid'], session['conversation_id']))
             
-        print(f"[Remora] 检测到会话 Undo 回滚，温存储已自愈水位线至行号: {target_rollback_line}")
-        last_line = target_rollback_line
-
-    if not row:
         conn.execute(
-            "INSERT INTO watermarks (project_uuid, conversation_id, last_line_processed, last_msg_id) VALUES (?, ?, ?, ?)",
-            (session['project_uuid'], session['conversation_id'], 0, 0))
+            "UPDATE watermarks SET last_msg_id=? WHERE project_uuid=? AND conversation_id=?",
+            (target_msg_id, session['project_uuid'], session['conversation_id']))
+            
+        print(f"[Remora] 检测到会话 Undo 回滚，温存储已自愈水位线至 msg_id: {target_msg_id}")
+        last_line = target_rollback_line
+        last_msg_id = target_msg_id
 
-    # 提取核心内容（只取 USER_INPUT + MODEL 产出）
-    key_content, _ = extract_key_content(session['transcript_path'], last_line)
+    # Create mapping of line_number to msg_id for the increment
+    cursor = conn.execute("SELECT line_number, id FROM messages WHERE conversation_id=? AND id > ?", (session['conversation_id'], last_msg_id))
+    line_to_msg_id = {row[0]: row[1] for row in cursor.fetchall()}
+    
+    current_msg_id = last_msg_id
+    if line_to_msg_id:
+        current_msg_id = max(line_to_msg_id.values())
 
-    return key_content, current_line, last_line
+    if not watermark_row:
+        conn.execute(
+            "INSERT INTO watermarks (project_uuid, conversation_id, last_line_processed, last_msg_id) VALUES (?, ?, 0, 0)",
+            (session['project_uuid'], session['conversation_id']))
+
+    # 提取核心内容（附带 msg_id）
+    key_content = extract_key_content(session['transcript_path'], last_line, line_to_msg_id)
+
+    return key_content, current_msg_id, last_msg_id

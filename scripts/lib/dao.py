@@ -19,7 +19,7 @@ def read_mode(session_id: str, default: str = "standard") -> str:
         with closing(_get_conn()) as conn:
             with conn:
                 row = conn.execute("SELECT mode FROM session_state WHERE session_id=?", (session_id,)).fetchone()
-                if row:
+                if row and row[0] is not None:
                     return row[0]
                 return default
     except Exception as e:
@@ -154,25 +154,41 @@ def force_cold_start_latest_session(main_conv_id: Optional[str] = None) -> None:
 # Topic Decisions Operations
 # ==========================================
 def get_confirmed_decisions(project_uuid: str, topic_id: str) -> List[Dict]:
-    """Returns [{'text': '...', 'files': [...]}]"""
+    """Returns [{'text': '...', 'files': [...], 'evidence': '...'}]"""
     try:
         import json
         with closing(_get_conn()) as conn:
             with conn:
                 rows = conn.execute(
-                    "SELECT decision, associated_files FROM topic_decisions WHERE project_uuid=? AND topic_id=? AND user_confirmed=1 ORDER BY created_at ASC", 
+                    "SELECT decision, rationale, evidence_msg_db_ids, associated_files FROM topic_decisions WHERE project_uuid=? AND topic_id=? AND user_confirmed=1 ORDER BY created_at ASC", 
                     (project_uuid, topic_id)
                 ).fetchall()
                 
                 decisions = []
-                for d_text, files_json in rows:
+                for d_text, rationale, evidence_msg_db_ids_json, files_json in rows:
                     files = []
                     if files_json:
                         try:
                             files = [item.get('file', '') for item in json.loads(files_json) if 'file' in item]
                         except Exception as e:
                             logging.error(f"Error parsing decision JSON files: {e}")
-                    decisions.append({"text": d_text, "files": files})
+                    
+                    evidence_texts = []
+                    if evidence_msg_db_ids_json:
+                        try:
+                            msg_ids = json.loads(evidence_msg_db_ids_json)
+                            for msg_id in msg_ids:
+                                msg_row = conn.execute("SELECT content FROM messages WHERE id=?", (msg_id,)).fetchone()
+                                if msg_row:
+                                    evidence_texts.append(msg_row[0])
+                        except Exception as e:
+                            logging.error(f"Error parsing evidence_msg_db_ids JSON: {e}")
+                            
+                    decisions.append({
+                        "text": f"{d_text} (原因: {rationale})",
+                        "files": files,
+                        "evidence": "\n".join(evidence_texts)
+                    })
                 return decisions
     except Exception as e:
         logging.error(f"Error in get_confirmed_decisions: {e}")
@@ -234,12 +250,13 @@ def recall_fts5_logs(project_uuid: str, conv_id: str, keyword: str, limit: int =
 
 def recall_decisions_by_fts5_topic(project_uuid: str, conv_id: str, keyword: str) -> List[str]:
     try:
+        import json
         safe_keyword = keyword.replace('"', '""')
         with closing(_get_conn()) as conn:
             with conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT '[' || topic_id || '] ' || decision || ' (原因: ' || rationale || ')'
+                    SELECT topic_id, decision, rationale, evidence_msg_db_ids
                     FROM topic_decisions
                     WHERE (project_uuid = ? OR conversation_id = ?)
                     AND topic_id IN (
@@ -254,13 +271,29 @@ def recall_decisions_by_fts5_topic(project_uuid: str, conv_id: str, keyword: str
                         AND fts.content MATCH ?
                     )
                 """, (project_uuid, conv_id, project_uuid, conv_id, conv_id, f'"{safe_keyword}"'))
-                return [row[0] for row in cursor.fetchall()]
+                
+                results = []
+                for topic_id, decision, rationale, evidence_ids_json in cursor.fetchall():
+                    evidence_texts = []
+                    if evidence_ids_json:
+                        try:
+                            msg_ids = json.loads(evidence_ids_json)
+                            for mid in msg_ids:
+                                msg_row = conn.execute("SELECT content FROM messages WHERE id=?", (mid,)).fetchone()
+                                if msg_row:
+                                    evidence_texts.append(msg_row[0][:200] + "...")
+                        except:
+                            pass
+                    evidence_str = f" [证据: {' | '.join(evidence_texts)}]" if evidence_texts else ""
+                    results.append(f"[{topic_id}] {decision} (原因: {rationale}){evidence_str}")
+                return results
     except Exception as e:
         logging.error(f"Error in recall_decisions_by_fts5_topic: {e}")
         return []
 
 def recall_decisions_by_like(project_uuid: str, conv_id: str, keyword: str, limit: int = 5) -> List[str]:
     try:
+        import json
         # Prevent LIKE wildcard injection
         safe_keyword = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         like_pattern = f"%{safe_keyword}%"
@@ -268,13 +301,28 @@ def recall_decisions_by_like(project_uuid: str, conv_id: str, keyword: str, limi
             with conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT '[' || topic_id || '] ' || decision || ' (原因: ' || rationale || ')'
+                    SELECT topic_id, decision, rationale, evidence_msg_db_ids
                     FROM topic_decisions
                     WHERE (project_uuid = ? OR conversation_id = ?)
                     AND (decision LIKE ? ESCAPE '\\' OR rationale LIKE ? ESCAPE '\\')
                     LIMIT ?
                 """, (project_uuid, conv_id, like_pattern, like_pattern, limit))
-                return [row[0] for row in cursor.fetchall()]
+                
+                results = []
+                for topic_id, decision, rationale, evidence_ids_json in cursor.fetchall():
+                    evidence_texts = []
+                    if evidence_ids_json:
+                        try:
+                            msg_ids = json.loads(evidence_ids_json)
+                            for mid in msg_ids:
+                                msg_row = conn.execute("SELECT content FROM messages WHERE id=?", (mid,)).fetchone()
+                                if msg_row:
+                                    evidence_texts.append(msg_row[0][:200] + "...")
+                        except:
+                            pass
+                    evidence_str = f" [证据: {' | '.join(evidence_texts)}]" if evidence_texts else ""
+                    results.append(f"[{topic_id}] {decision} (原因: {rationale}){evidence_str}")
+                return results
     except Exception as e:
         logging.error(f"Error in recall_decisions_by_like: {e}")
         return []
@@ -324,11 +372,19 @@ def run_topic_garbage_collection() -> None:
                 # Obtain EXCLUSIVE lock immediately to prevent Lock Upgrade Deadlocks in daemons
                 conn.execute("BEGIN EXCLUSIVE")
                 cursor = conn.execute(
-                    """SELECT uuid, topic_id FROM project_topics
-                       WHERE source = 'auto' AND status = 'closed'
-                         AND last_accessed_at < datetime('now', '-72 hours')
-                         AND (uuid, topic_id) NOT IN (
-                             SELECT DISTINCT project_uuid, topic_id FROM topic_decisions WHERE user_confirmed = 1
+                    """SELECT pt.uuid, pt.topic_id FROM project_topics pt
+                       WHERE pt.source = 'auto' AND pt.status = 'closed'
+                         AND pt.topic_id NOT IN (
+                             SELECT DISTINCT topic_id FROM topic_decisions WHERE user_confirmed = 1 AND project_uuid = pt.uuid
+                         )
+                         AND (
+                             COALESCE(
+                                 (SELECT MAX(m.timestamp) 
+                                  FROM topic_decisions td 
+                                  JOIN messages m ON td.created_at_msg_id = m.id 
+                                  WHERE td.project_uuid = pt.uuid AND td.topic_id = pt.topic_id),
+                                 pt.last_accessed_at
+                             ) < datetime('now', '-72 hours')
                          )"""
                 )
                 to_delete = cursor.fetchall()
@@ -343,28 +399,55 @@ def run_topic_garbage_collection() -> None:
 
 def prune_expired_watermarks(brain_dir: str) -> None:
     """
-    当本地 brain 下的物理会话目录被回收删除后，
-    定时增量扫描会自动 DELETE 数据库中该会话对应的 watermarks、messages 与 topic_decisions。
+    定期清理已失效的水印和关联数据。
     """
     try:
         import os
         import sys
+        if not os.path.isdir(brain_dir):
+            logging.error(f"[Remora] Invalid brain_dir {brain_dir}, aborting prune to prevent data loss.")
+            return
+
         with closing(_get_conn()) as conn:
-            with conn:
-                # Obtain EXCLUSIVE lock immediately to prevent Lock Upgrade Deadlocks in daemons
-                conn.execute("BEGIN EXCLUSIVE")
-                cursor = conn.execute("SELECT DISTINCT conversation_id FROM watermarks")
-                active_db_convs = [row[0] for row in cursor.fetchall()]
-                
-                for conv_id in active_db_convs:
-                    if conv_id.startswith("artifact_sync_"):
-                        continue
-                    conv_dir = os.path.join(brain_dir, conv_id)
-                    if not os.path.exists(conv_dir):
+            # First query without exclusive lock
+            cursor = conn.execute("""
+                SELECT w.conversation_id 
+                FROM watermarks w
+                LEFT JOIN messages m ON w.last_msg_id = m.id
+                WHERE COALESCE(m.timestamp, w.last_updated) < datetime('now', '-30 days')
+                OR NOT EXISTS (SELECT 1 FROM session_state ss WHERE ss.session_id = w.conversation_id)
+            """)
+            active_db_convs = [row[0] for row in cursor.fetchall()]
+            
+        to_delete = []
+        for conv_id in active_db_convs:
+            if conv_id.startswith("artifact_sync_"):
+                continue
+            conv_dir = os.path.join(brain_dir, conv_id)
+            
+            if not os.path.exists(conv_dir):
+                to_delete.append((conv_id, "文件缺失"))
+            else:
+                with closing(_get_conn()) as conn:
+                    res = conn.execute("""
+                        SELECT 1 FROM watermarks w
+                        LEFT JOIN messages m ON w.last_msg_id = m.id
+                        WHERE w.conversation_id = ? 
+                        AND COALESCE(m.timestamp, w.last_updated) < datetime('now', '-30 days')
+                        AND NOT EXISTS (SELECT 1 FROM session_state ss WHERE ss.session_id = w.conversation_id)
+                    """, (conv_id,)).fetchone()
+                    if res:
+                        to_delete.append((conv_id, "超期不活跃"))
+
+        if to_delete:
+            with closing(_get_conn()) as conn:
+                with conn:
+                    conn.execute("BEGIN EXCLUSIVE")
+                    for conv_id, reason in to_delete:
                         conn.execute("DELETE FROM watermarks WHERE conversation_id=?", (conv_id,))
                         conn.execute("DELETE FROM messages WHERE conversation_id=?", (conv_id,))
                         conn.execute("DELETE FROM topic_decisions WHERE conversation_id=?", (conv_id,))
-                        print(f"[Remora] 水印回收已清除会话: {conv_id}")
+                        print(f"[Remora] 水印回收已清除会话 ({reason}): {conv_id}")
     except Exception as e:
         logging.error(f"Error pruning expired watermarks: {e}")
         import sys
