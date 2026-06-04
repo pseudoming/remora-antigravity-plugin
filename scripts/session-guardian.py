@@ -2,12 +2,10 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 from lib.context import hook_entrypoint
-from lib.paths import get_db_path
 from lib.stats import cleanup, get_stats
 
 import json, re, subprocess
 
-DB_PATH = get_db_path()
 
 
 @hook_entrypoint(fallback_result={"injectSteps": [{"ephemeralMessage": "<system-reminder>⚠️ Remora Session Guardian 发生异常。状态同步防线已降级，但不影响正常对话。</system-reminder>"}]})
@@ -171,7 +169,7 @@ def main(context):
             # 正常退出自动物理清除重试计数缓存 (澄清：由于大模型调用 subagent-monitor 时强制传入 of {conv_id} 就是主会话 ID，因此 monitor 内部写入的 parent_conv_id 与此处拦截脚本读取 of conv_id 在物理上是完全同一键值，清理路径严格对齐，无歧义)
             if subagent_finish_detected:
                 try:
-                    retry_file = fos.path.join(get_data_dir(), ".runtime", f"remora_subagent_retries_{conv_id}.json")
+                    retry_file = os.path.join(get_data_dir(), ".runtime", f"remora_subagent_retries_{conv_id}.json")
                     if os.path.exists(retry_file):
                         os.remove(retry_file)
                 except:
@@ -226,18 +224,8 @@ def main(context):
         
     # 跨进程状态机同步 (写入 SQLite session_state 同步表，支持多拦截器 IPC)
     # 首次插入 is_cold_start = 1，更新时保持原有 is_cold_start，将其消费职责留给 Phase 26
-    try:
-        import sqlite3
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("""
-                INSERT INTO session_state (session_id, mode, is_cold_start, updated_at)
-                VALUES (?, ?, 1, CURRENT_TIMESTAMP)
-                ON CONFLICT(session_id) DO UPDATE SET
-                    mode = excluded.mode,
-                    updated_at = CURRENT_TIMESTAMP
-            """, (conv_id, mode))
-    except Exception as e:
-        pass
+    from lib import dao
+    dao.write_mode(conv_id, mode)
 
     # ==========================================
     # 设计原理五：View File 累加器与主干上下文防腐 (Anti-Context-Rot) 软阻断

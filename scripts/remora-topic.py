@@ -7,15 +7,12 @@ Remora Topic Controller Script
 """
 import argparse
 import os
-import sqlite3
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lib.paths import get_db_path
+from lib import dao
 
-DB_PATH = get_db_path()
-
-def _force_cold_start(conn):
+def _force_cold_start():
     # 强置 is_cold_start 信号位以实现冷启动与 Topic 切换同步
     main_conv_id = None
     if os.path.exists(os.path.join(get_data_dir(), ".runtime", "remora_main_conv_id.txt")):
@@ -24,19 +21,7 @@ def _force_cold_start(conn):
                 main_conv_id = mf.read().strip()
         except:
             pass
-    if main_conv_id:
-        conn.execute(
-            "INSERT INTO session_state (session_id, is_cold_start, updated_at) VALUES (?, 1, CURRENT_TIMESTAMP) "
-            "ON CONFLICT(session_id) DO UPDATE SET is_cold_start=1, updated_at=CURRENT_TIMESTAMP",
-            (main_conv_id,)
-        )
-    else:
-        # 仅对最近活跃的单一 session 进行置位，防止污染全表历史 session
-        conn.execute("""
-            UPDATE session_state 
-            SET is_cold_start = 1, updated_at = CURRENT_TIMESTAMP
-            WHERE session_id = (SELECT session_id FROM session_state ORDER BY updated_at DESC LIMIT 1)
-        """)
+    dao.force_cold_start_latest_session(main_conv_id)
 
 def main():
     parser = argparse.ArgumentParser(description="Remora Topic and Decision Controller")
@@ -52,15 +37,10 @@ def main():
         print("Error: Project UUID is required. Please specify via -u/--uuid or ANTIGRAVITY_PROJECT_ID env var.", file=sys.stderr)
         sys.exit(1)
 
-    if not os.path.exists(DB_PATH):
-        print(f"Error: Database file not found at {DB_PATH}.", file=sys.stderr)
-        sys.exit(1)
-
-    # 建立数据库连接，如果失败则快速失败 (Fail-Fast)
-    try:
-        conn = sqlite3.connect(DB_PATH)
-    except Exception as e:
-        print(f"Error: Failed to connect to database. {str(e)}", file=sys.stderr)
+    # dao operations encapsulate DB connection, so we don't need conn directly.
+    # except for testing DB presence:
+    if not dao.check_db_exists():
+        print(f"Error: Database file not found.", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -68,13 +48,8 @@ def main():
             if not args.name:
                 print("Error: Topic name (-n/--name) is required for new action.", file=sys.stderr)
                 sys.exit(1)
-            conn.execute(
-                "INSERT INTO project_topics (uuid, topic_id, status, source, last_accessed_at) VALUES (?, ?, 'open', 'manual', CURRENT_TIMESTAMP) "
-                "ON CONFLICT(uuid, topic_id) DO UPDATE SET status='open', source='manual', last_accessed_at=CURRENT_TIMESTAMP",
-                (project_uuid, args.name)
-            )
-            _force_cold_start(conn)
-            conn.commit()
+            dao.create_or_update_topic(project_uuid, args.name, summary="", source="manual")
+            _force_cold_start()
             print(f"Created active topic {args.name} in project {project_uuid}.")
 
         elif args.action == "switch":
@@ -82,14 +57,8 @@ def main():
                 print("Error: Topic name (-n/--name) is required for switch action.", file=sys.stderr)
                 sys.exit(1)
             # 切换当前项目下的活跃话题，将其他话题设为 closed，当前话题设为 open
-            conn.execute("UPDATE project_topics SET status='closed' WHERE uuid=?", (project_uuid,))
-            conn.execute(
-                "INSERT INTO project_topics (uuid, topic_id, status, last_accessed_at) VALUES (?, ?, 'open', CURRENT_TIMESTAMP) "
-                "ON CONFLICT(uuid, topic_id) DO UPDATE SET status='open', last_accessed_at=CURRENT_TIMESTAMP",
-                (project_uuid, args.name)
-            )
-            _force_cold_start(conn)
-            conn.commit()
+            dao.switch_topic(project_uuid, args.name)
+            _force_cold_start()
             print(f"Switched active topic to {args.name} in project {project_uuid}.")
 
         elif args.action == "close":
@@ -97,11 +66,7 @@ def main():
                 print("Error: Topic name (-n/--name) is required for close action.", file=sys.stderr)
                 sys.exit(1)
             # 关闭指定话题，物理晋升为 manual 防止 GC 清理
-            conn.execute(
-                "UPDATE project_topics SET status='closed', source='manual', last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?",
-                (project_uuid, args.name)
-            )
-            conn.commit()
+            dao.close_topic(project_uuid, args.name)
             print(f"Topic {args.name} closed in project {project_uuid}.")
 
         elif args.action == "confirm":
@@ -109,26 +74,16 @@ def main():
                 print("Error: Decision ID (-d/--decision-id) is required for confirm action.", file=sys.stderr)
                 sys.exit(1)
             # 手动打标确认决策
-            cursor = conn.execute(
-                "UPDATE topic_decisions SET user_confirmed=1 WHERE id=? AND project_uuid=?",
-                (args.decision_id, project_uuid)
-            )
-            conn.commit()
-            if cursor.rowcount == 0:
+            success = dao.confirm_decision(project_uuid, args.decision_id)
+            if not success:
                 print(f"Warning: No decision found with ID {args.decision_id} in project {project_uuid}.", file=sys.stderr)
             else:
                 print(f"Decision {args.decision_id} confirmed in project {project_uuid}.")
                 
                 # 晋升关联话题为 manual 并更新访问时间
-                topic_row = conn.execute(
-                    "SELECT topic_id FROM topic_decisions WHERE id=?", (args.decision_id,)
-                ).fetchone()
-                if topic_row:
-                    t_id = topic_row[0]
-                    conn.execute(
-                        "UPDATE project_topics SET source='manual', last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?",
-                        (project_uuid, t_id)
-                    )
+                t_id = dao.get_topic_id_by_decision(args.decision_id)
+                if t_id:
+                    dao.touch_topic_source_manual(project_uuid, t_id)
 
                 # 方案 B: 隐式沙箱自动合并并捕获物理文件列表
                 print("Checking for isolated subagent sandboxes to merge...", file=sys.stderr)
@@ -153,13 +108,9 @@ def main():
                                 if len(parts) > 1:
                                     physical_files.append(os.path.basename(parts[1].strip()))
                                     
-                        if physical_files and topic_row:
-                            t_id = topic_row[0]
-                            p_row = conn.execute(
-                                "SELECT associated_files FROM project_topics WHERE uuid=? AND topic_id=?",
-                                (project_uuid, t_id)
-                            ).fetchone()
-                            existing_assoc = json.loads(p_row[0]) if p_row and p_row[0] else []
+                        if physical_files and t_id:
+                            existing_assoc_json = dao.get_topic_associated_files(project_uuid, t_id)
+                            existing_assoc = json.loads(existing_assoc_json) if existing_assoc_json else []
                             assoc_dict = {item['file']: item for item in existing_assoc if 'file' in item}
                             
                             for pf in physical_files:
@@ -168,11 +119,7 @@ def main():
                                 elif "physical" not in assoc_dict[pf].get("source", ""):
                                     assoc_dict[pf]["source"] = assoc_dict[pf]["source"] + ", physical"
                                     
-                            conn.execute(
-                                "UPDATE project_topics SET associated_files=? WHERE uuid=? AND topic_id=?",
-                                (json.dumps(list(assoc_dict.values())), project_uuid, t_id)
-                            )
-                            conn.commit()
+                            dao.update_topic_associated_files(project_uuid, t_id, json.dumps(list(assoc_dict.values())))
                             print(f"[Remora] Integrated {len(physical_files)} physical changed files from sandbox.")
                     else:
                         print("No active sandbox worktree found. Nothing to merge.", file=sys.stderr)
@@ -182,8 +129,6 @@ def main():
     except Exception as e:
         print(f"Execution Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
-    finally:
-        conn.close()
 
 if __name__ == "__main__":
     main()
