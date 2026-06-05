@@ -1,10 +1,3 @@
 {
-  "mcpServers": {
-    "remora_sqlite_readonly": {
-      "command": "/usr/bin/python3",
-      "args": [
-        "{PLUGIN_ROOT}/scripts/sqlite_mcp.py"
-      ]
-    }
-  }
+  "mcpServers": {}
 }

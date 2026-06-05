@@ -45,21 +45,41 @@ For complex scripts, installation orchestrators (`install.py`), or drafts, you M
 - ❌ **BAD:** Assuming `os.listdir("agents")` works because the folder exists in your current development tree, which will crash with `FileNotFoundError` on a brand new machine.
 - ✅ **GOOD:** Using guard clauses like `if os.path.exists("agents"):` or `os.makedirs("agents", exist_ok=True)` to handle empty states.
 
-### 5. Commit Message Strictness
-When submitting changes to the repository, you **MUST NEVER** use lazy, sparse, or one-liner commit messages for substantive updates or retro additions. 
+### 5. Commit Message Strictness & Phase Reports
+When submitting changes to the repository, AI agents **MUST ALWAYS** format their commit messages according to the structured Phase Report standard. You **MUST NEVER** use lazy, sparse, or one-liner commit messages.
+
+### Standard Format:
+```
+[Phase X Report] <Brief Title of Phase Completion>
+
+Changelog:
+- <file_path_1>:
+  * <Detailed itemized change 1>
+  * <Detailed itemized change 2>
+- <file_path_2>:
+  * <Detailed itemized change>
+```
 
 - ❌ **BAD:**
 ```bash
-git commit -m "docs: update AGENTS.md"
+git commit -m "fix sqlite bug and clean code"
 ```
 
 - ✅ **GOOD:**
 ```bash
-git commit -m "[Phase X Retro] Update AGENTS.md with Architectural Disciplines
+git commit -m "[Phase 37 Report] Consolidated SQLite MCP, Subagent Realignment & Session Guardian Bug Fix
 
 Changelog:
-- AGENTS.md:
-  * Added Hook Schema Strictness rule to prevent protojson crashes.
-  * Added Zombie State Eradication rule for safer refactoring.
-  * Added Clean Install Preview rule to enforce empty-state verification."
+- scripts/session-guardian.py:
+  * Added subagent detection check to prevent overwriting parent session ID.
+- agents/remora_readonly_extractor.template.json:
+  * Restricted extraction tools to plain text only."
 ```
+
+### 6. Artifact Synchronization & Phase Archiving (制品同步与阶段归档)
+Every time a phase or task is completed and before submitting your changes, you **MUST** review all project planning artifacts (`walkthrough.md`, `task.md`, `implementation_plan.md`). You **MUST** ensure all completed sub-tasks are marked as `[x]`, the walkthrough is updated to reflect the final implementation details (not intermediate drafts), and stale/completed plans are appropriately archived.
+
+### 7. Environment Hygiene & Stale Script Cleanup (环境卫生与临时脚本清理)
+You **MUST ALWAYS** actively delete any temporary files, diagnostic scripts, test compilation caches, or hack scripts created in the `scratch/` directory or project tree immediately after diagnosing and fixing the root cause. Do not leave trailing debug scrap behind to pollute the codebase.
+
+
