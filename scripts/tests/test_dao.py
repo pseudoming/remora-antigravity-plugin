@@ -19,7 +19,7 @@ def setup_db(monkeypatch):
         
     # Initialize the schema for testing
     from contextlib import closing
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         with conn:
             conn.executescript("""
                 CREATE TABLE session_state (
@@ -97,7 +97,7 @@ def test_watermark_operations():
     assert dao.get_project_uuid_by_conv("conv_1") is None
     
     from contextlib import closing
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         with conn:
             conn.execute("INSERT INTO watermarks (conversation_id, project_uuid) VALUES ('conv_1', 'proj_1')")
         
@@ -129,7 +129,7 @@ def test_topic_operations():
 def test_decision_operations():
     # Insert some test data
     from contextlib import closing
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         with conn:
             conn.executescript("""
                 INSERT INTO messages (id, conversation_id, content) VALUES (1, 'c1', 'Evidence for python');
@@ -152,7 +152,7 @@ def test_decision_operations():
 def test_fts5_recall_operations():
     # Setup test data
     from contextlib import closing
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         with conn:
             conn.executescript("""
                 INSERT INTO watermarks (conversation_id, project_uuid) VALUES ('conv_1', 'proj_1');
@@ -182,21 +182,21 @@ def test_fts5_recall_operations():
     # test touch_topics
     # first fetch last_accessed
     from contextlib import closing
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         with conn:
             conn.execute("INSERT INTO project_topics (uuid, topic_id, last_accessed_at) VALUES ('proj_1', 'topic_A', '2000-01-01 00:00:00')")
     
     dao.touch_topics_accessed_by_recall("proj_1", "conv_1", "202606606")
     
     from contextlib import closing
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         with conn:
             row = conn.execute("SELECT last_accessed_at FROM project_topics WHERE uuid='proj_1' AND topic_id='topic_A'").fetchone()
             assert row[0] != '2000-01-01 00:00:00'
 
 def test_topic_garbage_collection():
     from contextlib import closing
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         with conn:
             conn.executescript("""
                 -- Topic 1: Old last_accessed_at, but recent messages -> Should NOT be deleted
@@ -214,7 +214,7 @@ def test_topic_garbage_collection():
     
     dao.run_topic_garbage_collection()
 
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         topics = conn.execute("SELECT topic_id FROM project_topics ORDER BY topic_id").fetchall()
         assert len(topics) == 2
         
@@ -236,7 +236,7 @@ def test_prune_expired_watermarks(tmp_path):
     os.makedirs(os.path.join(brain_dir, 'c1'))
     
     from contextlib import closing
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         with conn:
             conn.executescript("""
                 -- c1: Folder exists, recent messages, active -> NO DELETE
@@ -267,7 +267,7 @@ def test_prune_expired_watermarks(tmp_path):
     
     dao.prune_expired_watermarks(brain_dir)
     
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         watermarks = conn.execute("SELECT conversation_id FROM watermarks ORDER BY conversation_id").fetchall()
         assert len(watermarks) == 2
         assert watermarks[0][0] == 'c1'

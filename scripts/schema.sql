@@ -65,6 +65,10 @@ CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
     INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
 END;
 
+CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+    INSERT INTO messages_fts(messages_fts, rowid, content) VALUES ('delete', old.id, old.content);
+END;
+
 CREATE TABLE IF NOT EXISTS watermarks (
     project_uuid TEXT NOT NULL,           -- 关联的项目UUID
     conversation_id TEXT NOT NULL,        -- 对应的对话会话ID

@@ -36,7 +36,7 @@ class ConversationDataAccessLayer:
             return -1
         try:
             from contextlib import closing
-            with closing(sqlite3.connect(self.db_path, timeout=15.0)) as conn:
+            with closing(sqlite3.connect(self.db_path, timeout=15)) as conn:
                 with conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT MAX(idx) FROM steps WHERE status = 5;")
@@ -53,7 +53,7 @@ class ConversationDataAccessLayer:
             return 0
         try:
             from contextlib import closing
-            with closing(sqlite3.connect(self.db_path, timeout=15.0)) as conn:
+            with closing(sqlite3.connect(self.db_path, timeout=15)) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT MAX(idx) FROM steps")
                 row = cursor.fetchone()
@@ -84,7 +84,7 @@ class ConversationDataAccessLayer:
             
         try:
             from contextlib import closing
-            with closing(sqlite3.connect(self.db_path, timeout=15.0)) as conn:
+            with closing(sqlite3.connect(self.db_path, timeout=15)) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT idx, step_payload FROM steps ORDER BY idx DESC LIMIT ?", (limit,))
                 for row in cursor:
@@ -106,7 +106,7 @@ class ConversationDataAccessLayer:
             
         try:
             from contextlib import closing
-            with closing(sqlite3.connect(self.db_path, timeout=15.0)) as conn:
+            with closing(sqlite3.connect(self.db_path, timeout=15)) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT idx, step_payload FROM steps WHERE idx >= ? ORDER BY idx ASC", (start_idx,))
                 for row in cursor:

@@ -1,5 +1,22 @@
 import os
 import sys
+import time
+from datetime import datetime
+
+sys.path.insert(0, os.path.dirname(__file__))
+from lib.paths import HOOKS_PROFILE_LOG
+from lib.context import hook_entrypoint
+
+def log_duration(elapsed, exit_code=0):
+    try:
+        if os.path.exists(HOOKS_PROFILE_LOG) and os.path.getsize(HOOKS_PROFILE_LOG) > 1024 * 1024:
+            with open(HOOKS_PROFILE_LOG, "w", encoding="utf-8") as f:
+                f.write(f"=== Log Rotated at {datetime.now().isoformat()} ===\n")
+        with open(HOOKS_PROFILE_LOG, "a", encoding="utf-8") as f:
+            f.write(f"=== [zombie-detector.py] Run at {datetime.now().isoformat()} ===\n")
+            f.write(f"  [total]: {elapsed:.2f} ms (Exit Code: {exit_code})\n\n")
+    except Exception:
+        pass
 
 def get_sys_uptime():
     try:
@@ -35,7 +52,9 @@ def clean_whitelist(whitelist_path):
         
     return valid_pids
 
-def main():
+@hook_entrypoint(fallback_result={"decision": "allow"})
+def main(context):
+    t0 = time.perf_counter()
     my_uid = os.getuid()
     my_pid = str(os.getpid())
     sys_uptime = get_sys_uptime()
@@ -51,10 +70,16 @@ def main():
         "shellIntegration-bash.sh"
     }
 
+    is_tool_use = (context and isinstance(context, dict) and context.get('toolCall') is not None)
+
     try:
         pids = os.listdir('/proc')
     except Exception:
-        return
+        log_duration((time.perf_counter() - t0) * 1000.0, 0)
+        if is_tool_use:
+            return {"decision": "allow"}
+        else:
+            return {"injectSteps": []}
 
     for pid in pids:
         if not pid.isdigit() or pid == my_pid:
@@ -80,6 +105,9 @@ def main():
             # It's an Antigravity task. Check uptime.
             with open(os.path.join(pid_dir, 'stat'), 'r') as f:
                 stat_data = f.read().split()
+                # Skip if process is in D state (Uninterruptible sleep) to avoid hanging
+                if len(stat_data) > 2 and stat_data[2] == 'D':
+                    continue
                 # Field 22 is starttime (1-indexed in docs, 21 in 0-indexed list)
                 starttime = int(stat_data[21])
                 
@@ -104,18 +132,33 @@ def main():
                     continue
                 
                 # ZOMBIE DETECTED!
-                sys.stderr.write(f"\n[!] FATAL: UNMANAGED BACKGROUND PROCESS DETECTED.\n")
+                sys.stderr.write(f"\n[!] WARNING: UNMANAGED BACKGROUND PROCESS DETECTED.\n")
                 sys.stderr.write(f"SUSPECT: {cmdline} (UPTIME: {int(elapsed_seconds)}s, PID: {pid})\n\n")
-                sys.stderr.write("ACTION REQUIRED - YOU MUST EVALUATE THIS PROCESS:\n")
-                sys.stderr.write("1. Use `manage_task(list)` to find its Task ID.\n")
-                sys.stderr.write("2. Use `manage_task(status, TaskId=...)` to read its logs and check if it is actively working or stuck.\n")
-                sys.stderr.write("3. If it is hanging/zombie, execute `manage_task(kill, TaskId=...)`.\n")
-                sys.stderr.write(f"4. If it is working normally and intentional, execute `run_command(echo {pid} >> ~/.remora/zombie_whitelist)`.\n\n")
-                sys.stderr.write("ALL NEW COMMANDS ARE BLOCKED UNTIL YOU EXPLICITLY KILL OR WHITELIST IT.\n\n")
-                sys.exit(1)
+                
+                log_duration((time.perf_counter() - t0) * 1000.0, 0)
+                
+                if is_tool_use:
+                    return {
+                        "decision": "deny",
+                        "reason": f"⚠️ 安全拦截：系统存在运行中的未托管衍生进程 {pid}，工具执行已被临时拒绝。"
+                    }
+                else:
+                    return {
+                        "injectSteps": [
+                            {
+                                "ephemeralMessage": f"⚠️ 警告：检测到未托管衍生后台进程 {pid} (UPTIME: {int(elapsed_seconds)}s)。当前命令已被安全网关限制，请使用 manage_task(list) 物理清理该进程。"
+                            }
+                        ]
+                    }
                 
         except (IOError, OSError, PermissionError, IndexError, ValueError):
             continue
+
+    log_duration((time.perf_counter() - t0) * 1000.0, 0)
+    if is_tool_use:
+        return {"decision": "allow"}
+    else:
+        return {"injectSteps": []}
 
 if __name__ == '__main__':
     main()

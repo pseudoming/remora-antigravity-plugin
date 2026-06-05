@@ -58,7 +58,7 @@ def main():
             process_sessions(cycle_start)
             
             # [P0] 串行保序：前置 decisions 提取 commit 之后，立即执行 Plan 审批拦截与事件队列 AI 精确匹配
-            with sqlite3.connect(DB_PATH) as conn:
+            with sqlite3.connect(DB_PATH, timeout=15) as conn:
                 active_projects = [row[0] for row in conn.execute("SELECT DISTINCT uuid FROM project_topics").fetchall()]
                 for p_uuid in active_projects:
                     check_plan_approval(conn, p_uuid)

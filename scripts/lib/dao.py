@@ -5,7 +5,7 @@ from contextlib import closing
 from lib.paths import get_db_path
 
 def _get_conn() -> sqlite3.Connection:
-    return sqlite3.connect(get_db_path(), timeout=15.0)
+    return sqlite3.connect(get_db_path(), timeout=15)
 
 def check_db_exists() -> bool:
     import os

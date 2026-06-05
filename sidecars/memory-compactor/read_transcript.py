@@ -70,10 +70,22 @@ def read_incremental_logs(conn, session):
                 content = step.get('content', '')
                 
                 # 插入到 messages 表
+                role = step.get('role')
+                if not role:
+                    role = step.get('source', '')
+                if not role:
+                    step_type = step.get('type', '')
+                    if step_type == 'USER_INPUT':
+                        role = 'user'
+                    elif step_type == 'PLANNER_RESPONSE':
+                        role = 'model'
+                    else:
+                        role = 'unknown'
+
                 cursor = conn.execute(
                     "INSERT OR IGNORE INTO messages (conversation_id, line_number, timestamp, role, content) VALUES (?, ?, ?, ?, ?)",
                     (conv_id, current_line,
-                     format_timestamp(step.get('timestamp', '')), step.get('source', ''),
+                     format_timestamp(step.get('timestamp', '')), role,
                      content))
                 msg_id = cursor.lastrowid
                 

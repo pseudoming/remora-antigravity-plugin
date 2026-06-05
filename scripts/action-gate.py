@@ -7,7 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from lib.context import hook_entrypoint
+from lib.context import hook_entrypoint, get_profiler
 from lib.filesystem import get_snapshot, get_active_files
 from lib.session import read_mode
 
@@ -45,6 +45,14 @@ from lib.session import read_mode
 # ==========================================================
 # 用全局 `try-except Exception` 包裹 main()。若发生任何解析崩溃，默认无条件放行（返回空 injectSteps），确保正常交互绝对可用。
 
+def profiler_step(event):
+    try:
+        p = get_profiler()
+        if p:
+            p.step(event)
+    except Exception:
+        pass
+
 def get_physical_modifications(cwd, transcript_path):
     try:
         conv_dir = Path(transcript_path).parent.parent.parent
@@ -56,7 +64,9 @@ def get_physical_modifications(cwd, transcript_path):
             with open(snapshot_file, 'r', encoding='utf-8') as f:
                 pre_snapshot = json.load(f)
                 
+        profiler_step("phys_snapshot_pre_loaded")
         post_snapshot = get_snapshot(cwd)
+        profiler_step("phys_snapshot_post_computed")
         
         modified_files = set()
         for fpath, post_st in post_snapshot.items():
@@ -85,7 +95,6 @@ def normalize_filepath(arguments_dict):
     for alias in aliases:
         val = arguments_dict.get(alias)
         if val and isinstance(val, str):
-            # 去除可能的外围物理引号
             val = val.strip('\'"')
             return os.path.basename(val)
     return ""
@@ -170,8 +179,12 @@ def main(context):
     cdal = ConversationDataAccessLayer(conv_id)
     initial_num_steps = context.get('initialNumSteps', 0)
     
+    profiler_step("start_conv_state_read")
     planner_text, actual_tool_files, has_any_tool_calls = get_latest_conversation_states(cdal, initial_num_steps)
+    profiler_step("finish_conv_state_read")
+    
     physical_files = get_physical_modifications(cwd, transcript_path)
+    profiler_step("finish_physical_modifications")
     
     # 事实基座 = (解析 transcript 得到的工具调用文件集) U (物理增量比对得出的文件集)
     actual_files = actual_tool_files.union(physical_files)
@@ -213,13 +226,13 @@ def main(context):
     for pattern in action_patterns:
         matches = re.findall(pattern, planner_text, re.IGNORECASE)
         for path in matches:
-            # 如果 matches 是元组列表（例如带有多捕获组），则提取第一个非空项
             if isinstance(path, tuple):
                 path = [x for x in path if x][0]
             declared_files.add(os.path.basename(path))
             
     # 计算宣称已改但实际未发工具调用的文件差集
     phantom_modifications = declared_files - actual_files
+    profiler_step("regex_matching_complete")
     
     if phantom_modifications:
         # --------------------------------------------------------
@@ -232,13 +245,11 @@ def main(context):
             f"You MUST execute the write tool call first before making such claims!\n"
             f"</system-reminder>"
         )
-        # 强制模型继续执行，重新规划并发起工具调用
         return {
             "injectSteps": [{"ephemeralMessage": warning_msg}],
             "terminationBehavior": "force_continue"
         }
     else:
-        # 无虚报，默认放行终止
         return {"injectSteps": [], "terminationBehavior": ""}
 
 if __name__ == "__main__":

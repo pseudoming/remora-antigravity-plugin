@@ -52,7 +52,7 @@ def get_or_create_conversation(prompt):
                 if os.path.exists(cdal.db_path):
                     try:
                         import sqlite3
-                        with sqlite3.connect(cdal.db_path) as c:
+                        with sqlite3.connect(cdal.db_path, timeout=15) as c:
                             cur = c.cursor()
                             cur.execute("SELECT count(*) FROM steps")
                             line_count = cur.fetchone()[0]
@@ -224,7 +224,7 @@ def _get_active_topic(conn, project_uuid):
         return None
 
 def process_sessions(start_time):
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=15) as conn:
         active_sessions = get_active_conversations()
         for session in active_sessions:
             if time.time() - start_time > MAX_EXECUTION_TIME:

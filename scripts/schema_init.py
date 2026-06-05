@@ -14,7 +14,7 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 def init_db():
     from contextlib import closing
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    with closing(sqlite3.connect(DB_PATH, timeout=15.0)) as conn:
+    with closing(sqlite3.connect(DB_PATH, timeout=15)) as conn:
         with conn:
             with open(SCHEMA_PATH, 'r') as f:
                 conn.executescript(f.read())

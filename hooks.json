@@ -3,28 +3,33 @@
     "PreInvocation": [
       {
         "type": "command",
-        "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/zombie-detector.py",
-        "timeout": 10
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/zombie-detector.py",
+        "timeout": 30
       },
       {
         "type": "command",
-        "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/snapshot-git.py",
-        "timeout": 15
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/snapshot-git.py",
+        "timeout": 30
       },
       {
         "type": "command",
-        "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/session-guardian.py",
-        "timeout": 10
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/session-guardian.py",
+        "timeout": 30
       },
       {
         "type": "command",
-        "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/tone-injector.py",
-        "timeout": 10
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/tone-injector.py",
+        "timeout": 30
       },
       {
         "type": "command",
-        "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/cognitive-push.py --stage=pre-invoke",
-        "timeout": 10
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/cognitive-push.py --stage=pre-invoke",
+        "timeout": 30
+      },
+      {
+        "type": "command",
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/check-subagents-liveness.py",
+        "timeout": 30
       }
     ],
     "PreToolUse": [
@@ -33,8 +38,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/zombie-detector.py",
-            "timeout": 10
+            "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/zombie-detector.py",
+            "timeout": 30
           }
         ]
       },
@@ -43,8 +48,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/safety-check.py",
-            "timeout": 10
+            "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/safety-check.py",
+            "timeout": 30
           }
         ]
       },
@@ -53,8 +58,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/cognitive-push.py --stage=pre-tool",
-            "timeout": 10
+            "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/cognitive-push.py --stage=pre-tool",
+            "timeout": 30
           }
         ]
       }
@@ -62,20 +67,25 @@
     "PostInvocation": [
       {
         "type": "command",
-        "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/action-gate.py",
-        "timeout": 10
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/action-gate.py",
+        "timeout": 30
       }
     ],
     "Stop": [
       {
         "type": "command",
-        "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/sidecars/memory-compactor/compactor.py --event-driven",
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/sidecars/memory-compactor/compactor.py --event-driven",
+        "timeout": 30
+      },
+      {
+        "type": "command",
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/clean-session-stats.py",
         "timeout": 15
       },
       {
         "type": "command",
-        "command": "python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/clean-session-stats.py",
-        "timeout": 5
+        "command": "/usr/bin/python3 /home/agent/.gemini/config/plugins/remora-plugin/scripts/check-subagents-liveness.py",
+        "timeout": 30
       }
     ]
   }

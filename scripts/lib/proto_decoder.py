@@ -68,7 +68,11 @@ def extract_step_payload(blob):
     if not blob:
         return {}
         
-    root = parse_protobuf(blob)
+    try:
+        root = parse_protobuf(blob)
+    except Exception:
+        return {}
+        
     entry = {}
     
     step_type_list = root.get(1, [])
@@ -80,6 +84,34 @@ def extract_step_payload(blob):
             entry['type'] = 'USER_INPUT'
         else:
             entry['type'] = f'UNKNOWN_{step_type}'
+
+    tag5s = root.get(5, [])
+    for tag5_blob in tag5s:
+        try:
+            tag5_msg = parse_protobuf(tag5_blob)
+            
+            # Extract role
+            if 3 in tag5_msg:
+                role_val = tag5_msg[3][0]
+                if role_val == 4:
+                    entry['role'] = 'user'
+                elif role_val == 2:
+                    entry['role'] = 'model'
+                elif role_val == 5:
+                    entry['role'] = 'system'
+                else:
+                    entry['role'] = f'unknown_{role_val}'
+                    
+            # Extract timestamp from Tag 1 -> Tag 1
+            if 1 in tag5_msg:
+                sub_msg = parse_protobuf(tag5_msg[1][0])
+                if 1 in sub_msg:
+                    ts_val = sub_msg[1][0]
+                    from datetime import datetime, timezone
+                    dt = datetime.fromtimestamp(ts_val, timezone.utc)
+                    entry['timestamp'] = dt.strftime('%Y-%m-%d %H:%M:%S')
+        except Exception:
+            pass
             
     tag20s = root.get(20, [])
     for tag20_blob in tag20s:

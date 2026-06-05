@@ -22,7 +22,7 @@ def check_plan_approval(conn, project_uuid):
 
     # 2. 拉取此时间点之后的全部用户输入消息
     cursor = conn.execute(
-        "SELECT content FROM messages WHERE timestamp > ? AND role IN ('USER', 'USER_INPUT', 'USER_EXPLICIT')", (t_plan_change,)
+        "SELECT content FROM messages WHERE timestamp > ? AND role IN ('USER', 'USER_INPUT', 'USER_EXPLICIT', 'user')", (t_plan_change,)
     )
     user_messages = [r[0] for r in cursor.fetchall()]
 

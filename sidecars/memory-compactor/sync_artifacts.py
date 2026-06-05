@@ -28,7 +28,7 @@ def scan_and_ingest_artifacts(context):
 
     target_files = ["implementation_plan.md", "walkthrough.md"]
     
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(DB_PATH, timeout=15) as conn:
         for filename in target_files:
             file_path = os.path.join(artifact_dir, filename)
             if not os.path.exists(file_path):

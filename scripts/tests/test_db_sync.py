@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 
 import lib.dao as dao
 
-TEST_DB_PATH = "/tmp/test_remora_dual_write.db"
+TEST_DB_PATH = "/tmp/test_remora_db_sync.db"
 
 @pytest.fixture(autouse=True)
 def setup_db(monkeypatch):
@@ -23,7 +23,7 @@ def setup_db(monkeypatch):
         pass
         
     from contextlib import closing
-    with closing(sqlite3.connect(TEST_DB_PATH)) as conn:
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         with conn:
             conn.executescript("""
                 CREATE TABLE session_state (
@@ -81,7 +81,7 @@ def setup_db(monkeypatch):
         pass
 
 
-def test_compactor_dual_write(monkeypatch):
+def test_compactor_db_sync(monkeypatch):
     import lib.conversation
     def mock_stream(self, start_idx=0):
         yield {"step_index": 1, "type": "USER_INPUT", "source": "user", "content": "Hello", "timestamp": "2026-06-04T12:00:00Z"}
@@ -95,7 +95,7 @@ def test_compactor_dual_write(monkeypatch):
         'conversation_id': 'c1'
     }
     
-    with sqlite3.connect(TEST_DB_PATH) as conn:
+    with sqlite3.connect(TEST_DB_PATH, timeout=15) as conn:
         key_content, current_msg_id, last_msg_id = read_transcript.read_incremental_logs(conn, session)
         
         # Verify messages table populated

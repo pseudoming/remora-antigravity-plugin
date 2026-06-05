@@ -19,3 +19,5 @@ def get_data_dir():
 
 def get_db_path():
     return os.path.join(get_data_dir(), "remora_memory.db")
+
+HOOKS_PROFILE_LOG = os.path.join(get_data_dir(), "hooks_profile.log")

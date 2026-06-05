@@ -42,3 +42,13 @@ You MUST proactively use the `run_command` tool to execute the official retrieva
     - If 'kill_and_retry': You MUST immediately call `manage_subagents(Action='kill', ConversationIds=['<subagent_id>'])` to terminate it, and then call `invoke_subagent` to spawn a new one to retry the task.
     - If 'escalate_to_human': You MUST immediately call `manage_subagents(Action='kill', ConversationIds=['<subagent_id>'])` to terminate it, stop automatic retries, report the double failure to the user, and request human intervention.
 - **SANDBOX BOUNDARY**: Under Deep_Diver, match your actions to the blast radius. Do not use destructive shortcuts (e.g. bypass hooks, delete locks). Under ReadOnly_Extractor, report outcomes without hedging and never modify any code.
+- **SELF-HEALING INTERVENTION SOP (自愈介入 SOP 唤醒逻辑)**:
+  * **TRIGGER**: You MUST immediately trigger this self-healing intervention SOP if a subagent sends a blocked message (e.g., `{"remora_event": "subagent_block", "subagent_id": "<id>", "error_type": "<type>", "details": "<context>"}`), or if the static audit (`Stop` / `PreInvocation` audit) or `progress.json` indicates that the subagent is blocked, has failed, or is timed out/hung.
+  * **ACTIONS**:
+    1. **STOP PIPELINE**: Immediately halt the current execution pipeline and stop subsequent steps.
+    2. **FORCE KILL**: Proactively call `manage_subagents(Action='kill', ConversationIds=['<subagent_id>'])` to terminate the blocked or hung subagent.
+    3. **UPDATE TASK BOARD**: Immediately edit your `/artifacts/task.md` checklist, mark the failed step, and append a `[!] BLOCKER: Subagent <id> was blocked due to <error_type> (<details>)` entry.
+    4. **BRANCHED DECISION**: Analyze the error type:
+       - If `error_type` is `permission_denied` or `tool_missing`, DO NOT retry. Immediately report to the user and request escalation or local permission adjustments.
+       - If it is a silent timeout/hang, you are allowed to spawn a new subagent to retry the operation exactly once.
+    5. **FATAL DIAGNOSIS & RECOVER**: Perform diagnostic checks to identify root causes and apply recovery/fallback methods (such as alternative directories, downgrading to read-only tool usage) or escalate directly to the user if recovery is impossible. Never blindly retry or loop indefinitely.

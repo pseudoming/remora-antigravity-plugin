@@ -91,7 +91,7 @@ class TestSafetyRules(unittest.TestCase):
 class TestFactualConfidence(unittest.TestCase):
     def setUp(self):
         # 初始化内存数据库并创建所需的表结构
-        self.conn = sqlite3.connect(":memory:")
+        self.conn = sqlite3.connect(":memory:", timeout=15)
         self.conn.execute("""
             CREATE TABLE topic_decisions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

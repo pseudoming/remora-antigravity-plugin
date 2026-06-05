@@ -7,20 +7,15 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 from lib.filesystem import get_snapshot
+from lib.context import hook_entrypoint
 
-def main():
-    try:
-        context = json.load(sys.stdin)
-    except Exception:
-        print(json.dumps({"injectSteps": []}))
-        return
-        
+@hook_entrypoint(fallback_result={"injectSteps": []})
+def main(context):
     transcript_path = context.get('transcriptPath', '')
     cwd = context.get('cwd', os.getcwd())
     
     if not transcript_path:
-        print(json.dumps({"injectSteps": []}))
-        return
+        return {"injectSteps": []}
         
     try:
         conv_dir = Path(transcript_path).parent.parent.parent
@@ -35,7 +30,7 @@ def main():
     except Exception:
         pass
         
-    print(json.dumps({"injectSteps": []}))
+    return {"injectSteps": []}
 
 if __name__ == "__main__":
     main()
