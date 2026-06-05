@@ -65,6 +65,11 @@ pytest scripts/tests/
 ```
 **注意**：所有开发必须遵守 Quality Gate 规范，文档和非安装脚本代码中禁止硬编码非 antigravity 的 `~/.gemini` 或绝对路径。可使用 `{PLUGIN_ROOT}` 变量并在运行时由加载器/安装器进行动态解析替换。
 
+### 3. MCP 只读服务开发与加载限制
+1. **配置注册限制**：由于底座（Antigravity）只读取全局配置目录（即用户家目录下的底座配置目录）中的 `mcp_config.json` 配置文件来拉起和分发 MCP 服务，因此插件本地的 `mcp_config.json` 并不会被直接加载。
+2. **自动合并部署**：运行 `python3 install.py` 时，安装器会自动将本插件渲染的 `mcp_config.json` 内容追加合并至全局的 `mcp_config.json` 中，从而实现工具的无感注册。
+3. **底座热重载局限**：底座客户端不具备在运行期间动态热重载全局 MCP 配置文件（`mcp_config.json`）的特性。所以在当前主会话运行中，若执行 `install.py` 部署或修改了配置，主特工依然会遭遇缓存阻断并报错（如 `mcp server does not support tools`）。该限制是底座固有机制决定的，需等底座进程重启或在全新的子特工会话中方可正常生效。
+
 ---
 
 ## 四、 常见问题 FAQ

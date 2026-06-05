@@ -45,10 +45,38 @@ def main():
     # 1. 建立数据与运行时目录
     os.makedirs(runtime_dir, exist_ok=True)
     
-    # 2. 模板渲染: agents, workflows, hooks.json, SKILL.md
+    # 2. 模板渲染: agents, workflows, hooks.json, SKILL.md, mcp_config.json
     render_template(os.path.join(plugin_root, "hooks.template.json"), os.path.join(plugin_root, "hooks.json"), plugin_root)
     render_template(os.path.join(plugin_root, "sidecars", "memory-compactor", "sidecar.template.json"), os.path.join(plugin_root, "sidecars", "memory-compactor", "sidecar.json"), plugin_root)
     render_template(os.path.join(plugin_root, "skills", "remora-architecture", "SKILL.template.md"), os.path.join(plugin_root, "skills", "remora-architecture", "SKILL.md"), plugin_root)
+    render_template(os.path.join(plugin_root, "mcp_config.template.json"), os.path.join(plugin_root, "mcp_config.json"), plugin_root)
+
+    # ⚠️ 底座加载机制限制：
+    # 底座（Antigravity）只会读取全局配置目录中的 `~/.gemini/config/mcp_config.json` 来加载 MCP 服务进程。
+    # 插件局部目录下的 `mcp_config.json` 并不会被底座识别。
+    # 因此，在此处必须将本插件生成的局部 MCP 配置，合并追加至全局配置文件中，以实现工具无感注册。
+    global_mcp_config_path = os.path.join(config_dir, "mcp_config.json")
+    local_mcp_config_path = os.path.join(plugin_root, "mcp_config.json")
+    if os.path.exists(local_mcp_config_path):
+        try:
+            with open(local_mcp_config_path, 'r', encoding='utf-8') as lf:
+                local_data = json.load(lf)
+            
+            global_data = {"mcpServers": {}}
+            if os.path.exists(global_mcp_config_path):
+                with open(global_mcp_config_path, 'r', encoding='utf-8') as gf:
+                    global_data = json.load(gf)
+            
+            local_servers = local_data.get("mcpServers", {})
+            global_servers = global_data.setdefault("mcpServers", {})
+            for server_name, server_config in local_servers.items():
+                global_servers[server_name] = server_config
+            
+            with open(global_mcp_config_path, 'w', encoding='utf-8') as gf:
+                json.dump(global_data, gf, indent=2)
+            print(f"Merged local MCP config into global: {global_mcp_config_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to merge MCP config: {str(e)}", file=sys.stderr)
     
     agents_dir = os.path.join(plugin_root, "agents")
     if os.path.exists(agents_dir):
@@ -157,7 +185,7 @@ def main():
     # 6. 赋予执行权限
 
         
-    for pattern in ["scripts/*.py", "scripts/*.sh", "sidecars/memory-compactor/*.py", "install.py"]:
+    for pattern in ["scripts/*.py", "scripts/*.sh", "sidecars/memory-compactor/*.py", "install.py", "mcp_config.json"]:
         for file_path in glob.glob(os.path.join(plugin_root, pattern)):
             if os.path.exists(file_path):
                 st = os.stat(file_path)

@@ -11,6 +11,7 @@ context_dump.json
 scratch/
 artifacts/
 hooks.json
+mcp_config.json
 sidecars/memory-compactor/sidecar.json
 skills/remora-architecture/SKILL.md
 agents/*.json

@@ -33,15 +33,18 @@ You MUST proactively use the `run_command` tool to execute the official retrieva
   * If the subagent finishes earlier, the timer is automatically canceled.
   * If the timer fires and wakes you up, you MUST run the exact monitor command injected in the system reminder to assess the state.
   * If the monitor output JSON contains status "not_found" or "empty", assume initialization and wait by resetting a 60s schedule.
-  * If status is "active", you MUST NOT print any verbose or repetitive "liveness reports" (e.g., "Active check passed", "Still alive") to the user.
-    Instead:
-    1. Only output a brief description of the action the subagent is performing (e.g., "Subagent is running <last_tool>").
-    2. Silently call the `schedule` tool to set a new 60-second timer.
-    3. Immediately exit the current turn without printing extra greeting or status reports.
+  * If status is "active", you MUST print a brief, user-facing liveness report to keep the user informed (e.g., "🔍 **心跳存活反馈**: 子特工正在执行工具 `<last_tool>`，目前正常运行").
+    Then:
+    1. Silently call the `schedule` tool to set a new 60-second timer.
+    2. Exit the current turn immediately.
   * If zombie, check the `action_suggestion` in the monitor output:
     - If 'kill_and_retry': You MUST immediately call `manage_subagents(Action='kill', ConversationIds=['<subagent_id>'])` to terminate it, and then call `invoke_subagent` to spawn a new one to retry the task.
     - If 'escalate_to_human': You MUST immediately call `manage_subagents(Action='kill', ConversationIds=['<subagent_id>'])` to terminate it, stop automatic retries, report the double failure to the user, and request human intervention.
 - **SANDBOX BOUNDARY**: Under Deep_Diver, match your actions to the blast radius. Do not use destructive shortcuts (e.g. bypass hooks, delete locks). Under ReadOnly_Extractor, report outcomes without hedging and never modify any code.
+- **MESSAGE BRIDGE PROTOCOL (消息中继桥接协议)**:
+  * Whenever you receive a `send_message` progress payload from an active subagent, you MUST immediately extract the key updates.
+  * You MUST output a direct, user-facing progress report in the current turn (e.g., "✅ **子特工进度上报**: 子特工 [ID] 物理完成了 [具体改动/测试] 动作"), ensuring the user is fully synchronized.
+
 - **SELF-HEALING INTERVENTION SOP (自愈介入 SOP 唤醒逻辑)**:
   * **TRIGGER**: You MUST immediately trigger this self-healing intervention SOP if a subagent sends a blocked message (e.g., `{"remora_event": "subagent_block", "subagent_id": "<id>", "error_type": "<type>", "details": "<context>"}`), or if the static audit (`Stop` / `PreInvocation` audit) or `progress.json` indicates that the subagent is blocked, has failed, or is timed out/hung.
   * **ACTIONS**:
