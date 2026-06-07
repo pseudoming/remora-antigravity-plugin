@@ -1,5 +1,11 @@
 # Remora Project AI Agent Rules
 
+## ⚠️ PROJECT IDENTITY: THIS IS remora-plugin, NOT remora
+- This repository is the **Remora Antigravity Plugin** (`~/.gemini/config/plugins/remora-plugin`).
+- There is a **separate** repository called `remora` (at `/home/agent/wsl_code/remora`) which is the concept/prototype project.
+- **DO NOT** commit changes from this repo to the other one. They are different projects.
+- **DO NOT** reference `/home/agent/wsl_code/remora` in this codebase. All file paths and git operations belong to THIS project's directory.
+
 ## LARGE FILE SAFETY
 When reading or parsing potentially large log files (`*.jsonl`, etc.) in this project, you **MUST NEVER** use `f.readlines()` or load the entire file into memory at once. You **MUST** prioritize native shell utilities (`tail`, `grep`, `awk`) or use buffered/streaming reads to ensure O(1) memory footprint and minimal I/O latency.
 

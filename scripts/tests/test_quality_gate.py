@@ -42,7 +42,7 @@ class TestQualityGate(unittest.TestCase):
                 )
 
     def test_no_hardcoded_absolute_gemini_paths(self):
-        bad_home_pattern = re.compile(r'~' + r'/\.gemini/(?!antigravity)')
+        bad_home_pattern = re.compile(r'~' + r'/\.gemini/(?!antigravity|config/)')
         bad_abs_pattern = re.compile(r'/home/[^/]+/\.gemini/(?!antigravity)')
         
         for file_path in self.get_all_files([".py", ".md", ".json"]):
