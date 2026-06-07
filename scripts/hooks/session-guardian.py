@@ -5,7 +5,7 @@ from lib.context import hook_entrypoint
 from lib.stats import cleanup, get_stats
 
 import json, re, subprocess
-from lib.subagent import get_subagent_type
+from lib.subagent import get_subagent_type, AGENTAPI_BIN
 
 @hook_entrypoint(fallback_result={"injectSteps": [{"ephemeralMessage": "<system-reminder>⚠️ Remora Session Guardian 发生异常。状态同步防线已降级，但不影响正常对话。</system-reminder>"}]})
 def main(context):
@@ -30,12 +30,12 @@ def main(context):
             
     transcript_path = context.get('transcriptPath')
     
+    from lib.paths import extract_conv_id
+
+
     # 提取当前会话 ID
-    conv_id = "default"
-    if transcript_path:
-        match = re.search(r'/brain/([^/]+)/', transcript_path)
-        if match:
-            conv_id = match.group(1)
+    conv_id = extract_conv_id(transcript_path) or "default"
+    if conv_id != "default":
             try:
                 sub_type = get_subagent_type(transcript_path)
                 main_id_file = os.path.join(get_data_dir(), ".runtime", "remora_main_conv_id.txt")
@@ -198,7 +198,7 @@ def main(context):
                         env.update(cached_env)
                 except:
                     pass
-            cmd = ["/home/agent/.gemini/antigravity/bin/agentapi", "get-conversation-metadata", subagent_uuid]
+            cmd = [AGENTAPI_BIN, "get-conversation-metadata", subagent_uuid]
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
             if res.returncode == 0:
                 data = json.loads(res.stdout)

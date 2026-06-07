@@ -110,6 +110,8 @@ def main():
                                     
                         if physical_files and t_id:
                             dao.merge_physical_files_to_topic(project_uuid, t_id, physical_files)
+                            for pf in physical_files:
+                                dao.insert_file_change(project_uuid, wt_name, pf, "sandbox")
                             print(f"[Remora] Integrated {len(physical_files)} physical changed files from sandbox.")
                     else:
                         print("No active sandbox worktree found. Nothing to merge.", file=sys.stderr)

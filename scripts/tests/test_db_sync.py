@@ -89,15 +89,15 @@ def test_compactor_db_sync(monkeypatch):
         yield {"step_index": 2, "type": "PLANNER_RESPONSE", "source": "agent", "content": "Hi", "timestamp": "2026-06-04T12:00:01Z"}
     monkeypatch.setattr(lib.conversation.ConversationDataAccessLayer, "stream_steps_forward", mock_stream)
     
-    # Run read_transcript
-    import read_transcript
+    # Run warm_storage_sync
+    import warm_storage_sync
     session = {
         'project_uuid': 'p1',
         'conversation_id': 'c1'
     }
     
     with sqlite3.connect(TEST_DB_PATH, timeout=15) as conn:
-        key_content, current_msg_id, last_msg_id = read_transcript.read_incremental_logs(conn, session)
+        key_content, current_msg_id, last_msg_id = warm_storage_sync.read_incremental_logs(conn, session)
         
         # Verify messages table populated
         messages = conn.execute("SELECT id, line_number FROM messages").fetchall()

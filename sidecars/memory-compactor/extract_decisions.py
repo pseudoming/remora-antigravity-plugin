@@ -16,7 +16,7 @@ from scan_sessions import (
     load_excluded_ids,
     save_excluded_ids
 )
-from read_transcript import read_incremental_logs
+from warm_storage_sync import read_incremental_logs
 
 CONV_MARKER_FILE = os.path.join(DATA_DIR, "compactor_conversation_id.txt")
 BRAIN_DIR = os.path.expanduser("~/.gemini/antigravity/brain")

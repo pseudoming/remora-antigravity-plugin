@@ -3,14 +3,15 @@ import re
 import json
 import subprocess
 
+AGENTAPI_BIN = os.path.expanduser("~/.gemini/antigravity/bin/agentapi")
+
+from lib.paths import extract_conv_id
+
 
 def get_subagent_type(transcript_path):
-    if not transcript_path:
+    conv_id = extract_conv_id(transcript_path)
+    if not conv_id:
         return None
-    match = re.search(r'/brain/([^/]+)/', transcript_path)
-    if not match:
-        return None
-    conv_id = match.group(1)
 
     from lib.paths import get_data_dir
     data_dir = get_data_dir()
@@ -26,7 +27,7 @@ def get_subagent_type(transcript_path):
             except Exception:
                 pass
 
-        cmd = ["/home/agent/.gemini/antigravity/bin/agentapi", "get-conversation-metadata", conv_id]
+        cmd = [AGENTAPI_BIN, "get-conversation-metadata", conv_id]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
         if res.returncode == 0:
             data = json.loads(res.stdout)

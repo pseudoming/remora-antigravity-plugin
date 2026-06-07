@@ -437,7 +437,7 @@ flowchart TD
     A --> B{子会话 / 主会话识别}
     
     B -->|子特工会话| C[提取子代理 report 并更新其常驻话题文件列表]
-    B -->|主特工会话| D[增量读取日志 read_transcript.py]
+    B -->|主特工会话| D[增量读取日志 warm_storage_sync.py]
     
     D --> E{发生 Undo 回滚?}
     E -->|Yes| F[自愈水位线, 回滚 messages 事实与对应 decisions]

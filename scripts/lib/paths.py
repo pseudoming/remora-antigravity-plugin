@@ -21,3 +21,11 @@ def get_db_path():
     return os.path.join(get_data_dir(), "remora_memory.db")
 
 HOOKS_PROFILE_LOG = os.path.join(get_data_dir(), "hooks_profile.log")
+
+import re
+
+def extract_conv_id(transcript_path):
+    if not transcript_path:
+        return None
+    match = re.search(r'/brain/([^/]+)/', transcript_path)
+    return match.group(1) if match else None

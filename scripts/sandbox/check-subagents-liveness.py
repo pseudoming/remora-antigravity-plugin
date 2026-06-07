@@ -13,6 +13,7 @@ if scripts_dir not in sys.path:
     sys.path.insert(0, scripts_dir)
 
 from lib import paths
+from lib import dao
 
 def parse_sqlite_timestamp(ts_val) -> float:
     """将 SQLite 中不同格式的 timestamp 转换为 unix 时间戳"""
@@ -30,7 +31,7 @@ def parse_sqlite_timestamp(ts_val) -> float:
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
         try:
             # 强制统一作为 UTC 时间戳处理。
-            # 因为底层的 read_transcript.py 在入库时物理暴力移除了 'Z'，使得库内时间虽然无后缀，但实则为 UTC。
+            # 因为底层的 warm_storage_sync.py 在入库时物理暴力移除了 'Z'，使得库内时间虽然无后缀，但实则为 UTC。
             clean_str = ts_str.split('+')[0].split('Z')[0]
             dt = datetime.strptime(clean_str, fmt)
             return dt.replace(tzinfo=timezone.utc).timestamp()
@@ -260,14 +261,11 @@ def run_as_hook(input_data):
         project_uuid = None
         active_topic_ts = 0.0
         try:
-            with sqlite3.connect(paths.get_db_path(), timeout=15) as conn:
-                row = conn.execute("SELECT project_uuid FROM watermarks WHERE conversation_id=? LIMIT 1", (parent_conv_id,)).fetchone()
-                if row:
-                    project_uuid = row[0]
-                    if project_uuid:
-                        topic_row = conn.execute("SELECT created_at FROM project_topics WHERE uuid=? AND status='open' LIMIT 1", (project_uuid,)).fetchone()
-                        if topic_row:
-                            active_topic_ts = parse_sqlite_timestamp(topic_row[0])
+            project_uuid = dao.get_project_uuid_by_conv(parent_conv_id)
+            if project_uuid:
+                topic_ts = dao.get_active_topic_created_at(project_uuid)
+                if topic_ts:
+                    active_topic_ts = parse_sqlite_timestamp(topic_ts)
         except Exception as db_err:
             # 中文翻译：警告：获取 project_uuid 或活动话题信息失败
             # Warning: Failed to fetch project_uuid or active topic info
@@ -320,14 +318,9 @@ def run_as_hook(input_data):
         # Session-association filtering: verify candidate UUIDs are registered under the parent conversation's project_uuid in the watermarks table
         if project_uuid:
             try:
-                with sqlite3.connect(paths.get_db_path(), timeout=15) as conn:
-                    for sub_id in candidate_subagent_ids:
-                        row = conn.execute(
-                            "SELECT 1 FROM watermarks WHERE project_uuid=? AND conversation_id=? LIMIT 1",
-                            (project_uuid, sub_id)
-                        ).fetchone()
-                        if row:
-                            subagent_ids.append(sub_id)
+                for sub_id in candidate_subagent_ids:
+                    if dao.watermark_exists(project_uuid, sub_id):
+                        subagent_ids.append(sub_id)
             except Exception as db_err:
                 # 中文翻译：警告：在水印关联过滤期间失败
                 # Warning: Failed during watermarks correlation filter

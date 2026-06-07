@@ -75,6 +75,15 @@ def setup_db(monkeypatch):
                     value TEXT,
                     PRIMARY KEY(session_id, turn_idx, key)
                 );
+                CREATE TABLE IF NOT EXISTS file_changes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_uuid TEXT,
+                    conversation_id TEXT,
+                    file_name TEXT,
+                    source TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(conversation_id, file_name)
+                );
             """)
     
     yield
@@ -533,3 +542,23 @@ def test_prune_expired_watermarks_no_delete(tmp_path):
     with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
         rows = conn.execute("SELECT conversation_id FROM watermarks").fetchall()
         assert len(rows) == 1
+
+
+def test_file_changes_insert_and_query():
+    dao.insert_file_change("proj_1", "conv_1", "auth.py", "snapshot")
+    dao.insert_file_change("proj_1", "conv_1", "auth.py", "snapshot")
+    dao.insert_file_change("proj_1", "conv_1", "middleware.py", "snapshot")
+    dao.insert_file_change("proj_1", "conv_2", "logger.py", "sandbox")
+
+    with sqlite3.connect(TEST_DB_PATH, timeout=15) as conn:
+        conn.execute("INSERT INTO topic_decisions (project_uuid, topic_id, conversation_id, decision, rationale) VALUES ('proj_1', 'topic_A', 'conv_1', 'Use python', 'fast')")
+        conn.commit()
+
+    files = dao.get_files_by_topic("proj_1", "topic_A")
+    assert "auth.py" in files
+    assert "middleware.py" in files
+    assert "logger.py" not in files
+
+    decisions = dao.get_decisions_by_file("proj_1", "auth.py")
+    assert len(decisions) == 1
+    assert decisions[0]["decision"] == "Use python"

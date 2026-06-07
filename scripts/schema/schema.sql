@@ -99,3 +99,13 @@ CREATE TABLE IF NOT EXISTS runtime_hook_state (
     PRIMARY KEY (session_id, turn_idx, key)
 );
 
+CREATE TABLE IF NOT EXISTS file_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_uuid TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    source TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(conversation_id, file_name)
+);
+

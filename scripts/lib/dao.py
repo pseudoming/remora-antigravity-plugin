@@ -539,3 +539,87 @@ def delete_hook_state(session_id: str, turn_idx: int, key: str) -> None:
 def trim_hook_states(session_id: str, current_turn_idx: int) -> None:
     trim_runtime_hook_states(session_id, current_turn_idx)
 
+# ==========================================
+# File Changes Operations
+# ==========================================
+def insert_file_change(project_uuid: str, conversation_id: str, file_name: str, source: str) -> None:
+    with closing(_get_conn()) as conn:
+        with conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO file_changes (project_uuid, conversation_id, file_name, source) VALUES (?, ?, ?, ?)",
+                (project_uuid, conversation_id, file_name, source)
+            )
+
+def get_files_by_topic(project_uuid: str, topic_id: str) -> List[str]:
+    try:
+        with closing(_get_conn()) as conn:
+            with conn:
+                rows = conn.execute(
+                    """SELECT DISTINCT fc.file_name FROM file_changes fc
+                       JOIN topic_decisions td ON fc.conversation_id = td.conversation_id
+                       WHERE td.project_uuid = ? AND td.topic_id = ?""",
+                    (project_uuid, topic_id)
+                ).fetchall()
+                return [row[0] for row in rows]
+    except Exception as e:
+        logging.error(f"Error in get_files_by_topic: {e}")
+        return []
+
+def get_decisions_by_file(project_uuid: str, file_name: str) -> List[Dict]:
+    try:
+        with closing(_get_conn()) as conn:
+            with conn:
+                rows = conn.execute(
+                    """SELECT DISTINCT td.decision, td.rationale
+                       FROM topic_decisions td
+                       JOIN file_changes fc ON fc.conversation_id = td.conversation_id
+                       WHERE td.project_uuid = ? AND fc.file_name = ?
+                       ORDER BY td.created_at DESC""",
+                    (project_uuid, file_name)
+                ).fetchall()
+                return [{"decision": r[0], "rationale": r[1]} for r in rows]
+    except Exception as e:
+        logging.error(f"Error in get_decisions_by_file: {e}")
+        return []
+
+def watermark_exists(project_uuid: str, conversation_id: str) -> bool:
+    try:
+        with closing(_get_conn()) as conn:
+            with conn:
+                row = conn.execute(
+                    "SELECT 1 FROM watermarks WHERE project_uuid=? AND conversation_id=? LIMIT 1",
+                    (project_uuid, conversation_id)
+                ).fetchone()
+                return row is not None
+    except Exception as e:
+        logging.error(f"Error in watermark_exists: {e}")
+        return False
+
+def get_active_topic_created_at(project_uuid: str) -> Optional[str]:
+    try:
+        with closing(_get_conn()) as conn:
+            with conn:
+                row = conn.execute(
+                    "SELECT created_at FROM project_topics WHERE uuid=? AND status='open' LIMIT 1",
+                    (project_uuid,)
+                ).fetchone()
+                return row[0] if row else None
+    except Exception as e:
+        logging.error(f"Error in get_active_topic_created_at: {e}")
+        return None
+
+def cleanup_ghost_messages() -> int:
+    try:
+        with closing(_get_conn()) as conn:
+            with conn:
+                cursor = conn.execute(
+                    "DELETE FROM messages WHERE role IS NULL OR role = '' OR content IS NULL OR content = ''"
+                )
+                deleted = cursor.rowcount
+                if deleted > 0:
+                    conn.execute("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")
+                return deleted
+    except Exception as e:
+        logging.error(f"Error in cleanup_ghost_messages: {e}")
+        return 0
+

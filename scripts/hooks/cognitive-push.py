@@ -6,6 +6,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lib.context import hook_entrypoint
+from lib.paths import extract_conv_id
 from lib import dao
 
 MAX_CHARS = 750  # 粗略控制 300 tokens 预算上限
@@ -184,12 +185,7 @@ def main(context):
         return {"injectSteps": []}
         
     transcript_path = context.get('transcriptPath', '')
-    conv_id = "default"
-    if transcript_path:
-        import re
-        match = re.search(r'/brain/([^/]+)/', transcript_path)
-        if match:
-            conv_id = match.group(1)
+    conv_id = extract_conv_id(transcript_path) or "default"
     if conv_id == "default":
         latest = dao.get_latest_session()
         if latest:

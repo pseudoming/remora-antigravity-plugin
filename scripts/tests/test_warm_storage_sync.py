@@ -5,9 +5,9 @@ import pytest
 import json
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'sidecars', 'memory-compactor')))
-from read_transcript import read_incremental_logs
+from warm_storage_sync import read_incremental_logs
 
-TEST_DB_PATH = "/tmp/test_read_transcript.db"
+TEST_DB_PATH = "/tmp/test_warm_storage_sync.db"
 
 @pytest.fixture(autouse=True)
 def setup_db():

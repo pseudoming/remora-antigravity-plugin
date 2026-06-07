@@ -9,6 +9,7 @@ from pathlib import Path
 
 from lib.context import hook_entrypoint, get_profiler
 from lib.filesystem import get_snapshot, get_active_files
+from lib.paths import extract_conv_id
 from lib.session import read_mode
 
 # ##########################################################
@@ -170,11 +171,7 @@ def main(context):
     except Exception:
         pass
 
-    conv_id = "default"
-    if transcript_path:
-        match = re.search(r'/brain/([^/]+)/', transcript_path)
-        if match:
-            conv_id = match.group(1)
+    conv_id = extract_conv_id(transcript_path) or "default"
             
     # 规则 7: Bypass gating if write tool returns error
     tool_call_result = context.get('toolCallResult', {})
@@ -182,6 +179,7 @@ def main(context):
         return {"injectSteps": [], "terminationBehavior": ""}
             
     from lib.dao import get_hook_state, set_hook_state, trim_hook_states
+    from lib.dao import insert_file_change, get_project_uuid_by_conv
     cdal = ConversationDataAccessLayer(conv_id)
     current_turn_idx = cdal.get_current_turn_idx()
 
@@ -213,6 +211,12 @@ def main(context):
     
     physical_files = get_physical_modifications(cwd, transcript_path)
     profiler_step("finish_physical_modifications")
+    
+    if physical_files:
+        project_uuid = get_project_uuid_by_conv(conv_id)
+        if project_uuid:
+            for fname in physical_files:
+                insert_file_change(project_uuid, conv_id, fname, "snapshot")
     
     # 事实基座 = (解析 transcript 得到的工具调用文件集) U (物理增量比对得出的文件集)
     actual_files = actual_tool_files.union(physical_files)
