@@ -13,7 +13,7 @@ if scripts_dir not in sys.path:
 
 import importlib
 # action-gate now lives in hooks/, add it to path for module import
-_hooks_dir = os.path.join(scripts_dir, 'hooks')
+_hooks_dir = os.path.join(scripts_dir, 'adapter', 'hooks')
 if _hooks_dir not in sys.path:
     sys.path.insert(0, _hooks_dir)
 action_gate = importlib.import_module("action-gate")

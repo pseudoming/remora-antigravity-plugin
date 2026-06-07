@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from adapter.bridge.context import hook_entrypoint
 from adapter.bridge.paths import extract_conv_id
 from lib import dao

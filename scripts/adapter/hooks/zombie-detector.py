@@ -3,7 +3,7 @@ import sys
 import time
 from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from adapter.bridge.paths import HOOKS_PROFILE_LOG
 from adapter.bridge.context import hook_entrypoint
 

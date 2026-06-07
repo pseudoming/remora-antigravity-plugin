@@ -4,7 +4,7 @@ import argparse
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from adapter.bridge.paths import get_data_dir
 """
 Remora Topic Controller Script

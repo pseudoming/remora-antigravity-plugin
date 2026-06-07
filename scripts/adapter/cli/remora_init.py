@@ -7,7 +7,7 @@ def init_environment():
     - 只在字段不存在时才初始化，已存在则不覆盖
     - 避免用户手动关闭 enabled: false 后被自动改回 true
     """
-    plugin_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    plugin_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     config_dir = os.path.join(plugin_dir, '..', '..')
     
     # 1. 检查并创建沙箱项目

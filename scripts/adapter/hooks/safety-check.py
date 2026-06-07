@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'rules'))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'rules'))
 from adapter.bridge.paths import get_data_dir
 from adapter.bridge.context import hook_entrypoint
 from adapter.bridge.session import read_mode

@@ -3,7 +3,7 @@
     "PreInvocation": [
       {
         "type": "command",
-        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/zombie-detector.py",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/adapter/hooks/zombie-detector.py",
         "timeout": 30
       },
       {
@@ -13,17 +13,17 @@
       },
       {
         "type": "command",
-        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/session-guardian.py",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/adapter/hooks/session-guardian.py",
         "timeout": 30
       },
       {
         "type": "command",
-        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/tone-injector.py",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/adapter/hooks/tone-injector.py",
         "timeout": 30
       },
       {
         "type": "command",
-        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/cognitive-push.py --stage=pre-invoke",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/adapter/hooks/cognitive-push.py --stage=pre-invoke",
         "timeout": 30
       },
       {
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{PYTHON} {PLUGIN_ROOT}/scripts/zombie-detector.py",
+            "command": "{PYTHON} {PLUGIN_ROOT}/scripts/adapter/hooks/zombie-detector.py",
             "timeout": 30
           }
         ]
@@ -48,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{PYTHON} {PLUGIN_ROOT}/scripts/safety-check.py",
+            "command": "{PYTHON} {PLUGIN_ROOT}/scripts/adapter/hooks/safety-check.py",
             "timeout": 30
           }
         ]
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{PYTHON} {PLUGIN_ROOT}/scripts/cognitive-push.py --stage=pre-tool",
+            "command": "{PYTHON} {PLUGIN_ROOT}/scripts/adapter/hooks/cognitive-push.py --stage=pre-tool",
             "timeout": 30
           }
         ]
@@ -67,7 +67,7 @@
     "PostInvocation": [
       {
         "type": "command",
-        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/action-gate.py",
+        "command": "{PYTHON} {PLUGIN_ROOT}/scripts/adapter/hooks/action-gate.py",
         "timeout": 30
       }
     ],
