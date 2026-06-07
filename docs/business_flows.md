@@ -20,7 +20,7 @@
   * 将 Language Server 凭证缓存到 `{PLUGIN_ROOT}/data/.runtime/remora_agent_env.json`，确保子特工运行时环境变量不丢失。
   * 向标准输出（`stdout`）返回 JSON 格式的 `injectSteps`，向大模型注入 `<system-reminder>` 提示词。
 * **详细步骤**：
-  1. 拦截器被唤醒，验证 `{PLUGIN_ROOT}/installed.flag` 是否存在，若不存在则直接放行。
+  1. 拦截器被唤醒，验证 `{data_dir}/.runtime/installed.flag` 是否存在，若不存在则直接放行。
   2. 从 `stdin` 读取上下文 JSON，解析出当前 `conversationId` 和最近的对话历史。
   3. 查询 `watermarks` 获取会话对应的 `project_uuid`。
   4. 读取 `{PLUGIN_ROOT}/scripts/adapter/hooks/keywords.json` 中配置的模式词（如 `[strict]`、`[relax]`）。若用户发言中包含对应词，则更新 `session_state` 的 `mode` 列。
