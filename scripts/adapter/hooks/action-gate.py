@@ -11,7 +11,7 @@ from adapter.bridge.context import hook_entrypoint, get_profiler
 from lib.filesystem import get_snapshot, get_active_files
 from adapter.bridge.paths import extract_conv_id
 from adapter.bridge.session import read_mode
-from core.logger import warn, error
+from core.logger import warn, error, debug
 
 # ##########################################################
 # AGENT MAINTENANCE DISCIPLINE (架构设计维护纪律)
@@ -265,6 +265,10 @@ def main(context):
             
     # 计算宣称已改但实际未发工具调用的文件差集
     phantom_modifications = declared_files - actual_files
+    if phantom_modifications:
+        debug(f"phantom detected: {phantom_modifications}")
+    else:
+        debug("phantom check: no false positives")
     profiler_step("regex_matching_complete")
     
     if phantom_modifications:

@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 import importlib
 from datetime import datetime, timedelta
 
@@ -14,11 +13,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 def reset_logger():
     """Reset the logger module globals before each test."""
     from core import logger
+    import uuid as _uuid
     logger._init_done = False
     logger._log_file = None
+    logger._TRACE_ID = f"s_{_uuid.uuid4().hex[:8]}"
+    os.environ.pop("REMORA_TRACE_ID", None)
     yield
     logger._init_done = False
     logger._log_file = None
+    logger._TRACE_ID = f"s_{_uuid.uuid4().hex[:8]}"
+    os.environ.pop("REMORA_TRACE_ID", None)
 
 
 @pytest.fixture
@@ -56,8 +60,9 @@ class TestLogWriting:
         log_path = os.path.join(str(log_dir), "system.log")
         with open(log_path) as f:
             content = f.read().strip()
-        # Format: [YYYY-MM-DD HH:MM:SS] [INFO] [file.py:NN] hello world
-        assert "[INFO]" in content
+        # Format: [TID:...] [YYYY-MM-DD HH:MM:SS] [INFO ] [file.py:NN] hello world
+        assert "[TID:" in content
+        assert "[INFO" in content
         assert "[test_logger.py:" in content
         assert content.endswith("hello world")
 
@@ -69,7 +74,8 @@ class TestLogWriting:
         log_path = os.path.join(str(log_dir), "system.log")
         with open(log_path) as f:
             log_content = f.read().strip()
-        assert "[WARN]" in log_content
+        assert "[TID:" in log_content
+        assert "[WARN" in log_content
         assert "danger zone" in log_content
         # Check stderr
         captured = capsys.readouterr()
@@ -84,6 +90,7 @@ class TestLogWriting:
         log_path = os.path.join(str(log_dir), "system.log")
         with open(log_path) as f:
             log_content = f.read().strip()
+        assert "[TID:" in log_content
         assert "[ERROR]" in log_content
         assert "fatal failure" in log_content
         # Check stderr
@@ -98,7 +105,8 @@ class TestLogWriting:
         log_path = os.path.join(str(log_dir), "system.log")
         with open(log_path) as f:
             content = f.read().strip()
-        assert "[PROF]" in content
+        assert "[TID:" in content
+        assert "[PROF" in content
         assert "benchmark data" in content
 
     def test_file_content_is_written_and_readable(self, log_dir):
@@ -112,6 +120,118 @@ class TestLogWriting:
         assert len(lines) == 2
         assert "line one" in lines[0]
         assert "line two" in lines[1]
+
+
+class TestTraceID:
+    def test_trace_id_default(self, log_dir):
+        from core import logger
+        assert logger._TRACE_ID.startswith("s_")
+        assert len(logger._TRACE_ID) == 10
+
+    def test_set_trace_id(self, log_dir):
+        from core import logger
+        logger.set_trace_id("my_custom_tid")
+        assert logger._TRACE_ID == "my_custom_tid"
+        assert os.environ["REMORA_TRACE_ID"] == "my_custom_tid"
+
+    def test_trace_id_inheritance(self, log_dir, monkeypatch):
+        from core import logger
+        monkeypatch.setitem(os.environ, "REMORA_TRACE_ID", "parent_tid_123")
+        logger._init_done = False
+        logger.init()
+        assert logger._TRACE_ID == "parent_tid_123"
+
+    def test_trace_id_in_log_line(self, log_dir):
+        from core import logger
+        logger.init()
+        logger.info("trace test")
+        log_path = os.path.join(str(log_dir), "system.log")
+        with open(log_path) as f:
+            content = f.read()
+        assert "[TID:" in content
+
+
+class TestLogLevels:
+    def test_log_level_off(self, log_dir, monkeypatch):
+        from core import logger
+        monkeypatch.setitem(os.environ, "REMORA_LOG_LEVEL", "OFF")
+        monkeypatch.setattr(logger, "_LEVEL", 4)
+        logger.init()
+        logger.info("off info")
+        logger.warn("off warn")
+        logger.error("off error")
+        logger.debug("off debug")
+        log_path = os.path.join(str(log_dir), "system.log")
+        assert not os.path.exists(log_path)
+
+    def test_log_level_error(self, log_dir, monkeypatch):
+        from core import logger
+        monkeypatch.setitem(os.environ, "REMORA_LOG_LEVEL", "ERROR")
+        monkeypatch.setattr(logger, "_LEVEL", 3)
+        logger.init()
+        logger.info("info msg")
+        logger.warn("warn msg")
+        logger.error("error msg")
+        logger.debug("debug msg")
+        log_path = os.path.join(str(log_dir), "system.log")
+        with open(log_path) as f:
+            content = f.read()
+        assert "error msg" in content
+        assert "info msg" not in content
+        assert "warn msg" not in content
+        assert "debug msg" not in content
+
+    def test_log_level_debug(self, log_dir, monkeypatch):
+        from core import logger
+        monkeypatch.setitem(os.environ, "REMORA_LOG_LEVEL", "DEBUG")
+        monkeypatch.setattr(logger, "_LEVEL", 0)
+        logger.init()
+        logger.debug("debug msg")
+        logger.info("info msg")
+        logger.warn("warn msg")
+        logger.error("error msg")
+        log_path = os.path.join(str(log_dir), "system.log")
+        with open(log_path) as f:
+            content = f.read()
+        assert "debug msg" in content
+        assert "info msg" in content
+        assert "warn msg" in content
+        assert "error msg" in content
+
+
+class TestDebug:
+    def test_debug_in_file(self, log_dir, monkeypatch):
+        from core import logger
+        monkeypatch.setitem(os.environ, "REMORA_LOG_LEVEL", "DEBUG")
+        monkeypatch.setattr(logger, "_LEVEL", 0)
+        logger.init()
+        logger.debug("debug message")
+        log_path = os.path.join(str(log_dir), "system.log")
+        with open(log_path) as f:
+            content = f.read()
+        assert "debug message" in content
+        assert "[DEBUG]" in content
+
+    def test_debug_suppressed_at_info(self, log_dir, monkeypatch):
+        from core import logger
+        monkeypatch.setitem(os.environ, "REMORA_LOG_LEVEL", "INFO")
+        monkeypatch.setattr(logger, "_LEVEL", 1)
+        logger.init()
+        logger.debug("silent debug")
+        log_path = os.path.join(str(log_dir), "system.log")
+        assert not os.path.exists(log_path)
+
+
+class TestWarnStderr:
+    def test_warn_stderr_always(self, log_dir, monkeypatch, capsys):
+        from core import logger
+        monkeypatch.setitem(os.environ, "REMORA_LOG_LEVEL", "OFF")
+        monkeypatch.setattr(logger, "_LEVEL", 4)
+        logger.init()
+        logger.warn("stderr check")
+        captured = capsys.readouterr()
+        assert "[WARN]" in captured.err
+        assert "stderr check" in captured.err
 
 
 class TestRotation:

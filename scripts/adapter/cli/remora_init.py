@@ -57,3 +57,12 @@ def init_environment():
                 os.chmod(file_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
             
     return initialized
+
+def main():
+    from core.logger import set_trace_id
+    import uuid
+    set_trace_id(f"c_{uuid.uuid4().hex[:8]}")
+    init_environment()
+
+if __name__ == "__main__":
+    main()

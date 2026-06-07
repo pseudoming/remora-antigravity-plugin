@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from adapter.bridge.context import hook_entrypoint
 from adapter.bridge.paths import extract_conv_id
 from lib import dao
-from core.logger import warn, error
+from core.logger import warn, error, debug
 
 MAX_CHARS = 750  # 粗略控制 300 tokens 预算上限
 
@@ -75,6 +75,7 @@ def _handle_pre_invocation(context, conv_id, current_turn_idx):
     
     if decisions:
         decision_text = _truncate_decisions(decisions)
+        debug(f"session resumed: {conv_id}, injecting {len(decisions)} decisions")
         # 中文翻译：
         # ⚠️ REMORA 会话恢复警告：
         # ============================================================

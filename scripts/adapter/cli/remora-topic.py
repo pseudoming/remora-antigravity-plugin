@@ -25,6 +25,9 @@ def _force_cold_start():
     dao.force_cold_start_latest_session(main_conv_id)
 
 def main():
+    from core.logger import set_trace_id
+    import uuid
+    set_trace_id(f"c_{uuid.uuid4().hex[:8]}")
     parser = argparse.ArgumentParser(description="Remora Topic and Decision Controller")
     parser.add_argument("action", choices=["new", "switch", "close", "confirm"], help="Action to perform")
     parser.add_argument("-u", "--uuid", help="Project UUID (defaults to ANTIGRAVITY_PROJECT_ID env var)")
@@ -120,7 +123,7 @@ def main():
                     error(f"Sandbox automatic merge failed: {str(e)}")
 
     except Exception as e:
-        error(f"Execution Error: {str(e)}")
+        error(f"Execution failed: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":

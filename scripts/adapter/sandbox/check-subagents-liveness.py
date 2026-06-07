@@ -14,7 +14,7 @@ if scripts_dir not in sys.path:
 
 from adapter.bridge import paths
 from lib import dao
-from core.logger import warn
+from core.logger import warn, debug
 
 def parse_sqlite_timestamp(ts_val) -> float:
     """将 SQLite 中不同格式的 timestamp 转换为 unix 时间戳"""
@@ -67,7 +67,7 @@ def run_audit(conv_id: str, parent_conv_id: str = None) -> dict:
             with open(progress_path, "r", encoding="utf-8") as f:
                 progress_data = json.load(f)
         except Exception as e:
-            warn(f"Failed to read progress file: {str(e)}")
+            warn(f"{str(e)}")
             
     # 2. 读取 sqlite 数据库中的 messages 表
     db_path = paths.get_db_path()
@@ -112,8 +112,8 @@ def run_audit(conv_id: str, parent_conv_id: str = None) -> dict:
                         break
             conn.close()
         except Exception as e:
-            warn(f"Failed to query database: {str(e)}")
-
+            warn(f"{str(e)}")
+ 
     # 3. 判定逻辑
     status = progress_data.get("status")
     last_updated_at_val = progress_data.get("last_updated_at")
@@ -181,7 +181,11 @@ def run_audit(conv_id: str, parent_conv_id: str = None) -> dict:
         if min_elapsed > threshold:
             is_dead = True
             death_reason = f"Liveness timeout: last updated {min_elapsed:.1f}s ago via {min_source} (Threshold: {threshold}s)."
-            
+    
+    idle_seconds = msg_elapsed if msg_elapsed >= 0 else progress_elapsed
+    last_tool_name = latest_msg_role or "unknown"
+    debug(f"subagent {conv_id}: status={'zombie' if is_dead else 'active'}, idle={idle_seconds:.0f}s, tool={last_tool_name}")
+    
     if is_dead:
         # 顺便写回 progress.json，将其标记为 blocked，加速下一次感知
         try:
@@ -270,8 +274,8 @@ def run_as_hook(input_data):
         except Exception as db_err:
             # 中文翻译：警告：获取 project_uuid 或活动话题信息失败
             # Warning: Failed to fetch project_uuid or active topic info
-            warn(f"Failed to fetch project_uuid or active topic info: {str(db_err)}")
-
+            warn(f"{str(db_err)}")
+        
         # 2. 时序范围截断：提取最后 20 条日志范围或当前活动话题的步骤
         # Temporal range truncation: extract steps within the last 20 logs or active topic timeframe
         all_steps = list(cdal.stream_steps_forward())
@@ -389,6 +393,9 @@ def run_as_hook(input_data):
     return {"decision": "allow", "reason": "All subagents are active"}
 
 def main():
+    from core.logger import set_trace_id
+    import uuid
+    set_trace_id(f"s_{uuid.uuid4().hex[:8]}")
     if len(sys.argv) > 1:
         conv_id = sys.argv[1]
         res = run_audit(conv_id)

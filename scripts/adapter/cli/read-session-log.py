@@ -37,6 +37,9 @@ def read_last_user_ai_rounds(conv_id, rounds=10):
         print(f"[{r['role'].upper()}]: {r['content']}")
 
 if __name__ == "__main__":
+    from core.logger import set_trace_id
+    import uuid
+    set_trace_id(f"c_{uuid.uuid4().hex[:8]}")
     if len(sys.argv) < 2:
         print("Usage: python3 read-session-log.py <conversation_id> [rounds]")
         sys.exit(1)

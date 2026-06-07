@@ -87,3 +87,9 @@ pytest scripts/tests/
   1. **开启 WAL 模式**：Remora 默认通过 Schema 初始化脚本开启了 WAL 预写日志模式（`PRAGMA journal_mode=WAL;`），这能够实现读写并发不冲突。若该模式失效，请运行 `python3 scripts/schema_init.py` 重新校验挂载。
   2. **锁超时重试**：数据库连接时默认配置了 `timeout=15`（15秒等待缓冲），确保前台在写入时有足够的重试窗口。
   3. **降低 GC 频次**：如果高并发写入量极高，可编辑后台 `compactor.py` 配置文件，适当调大垃圾清理周期的轮询间隔（例如由 5 分钟调整为 30 分钟），避开高峰。
+
+---
+
+## 五、 Debugging
+
+See [scripts/debug/README.md](scripts/debug/README.md) for debug tool documentation.

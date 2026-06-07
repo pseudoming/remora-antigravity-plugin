@@ -11,6 +11,12 @@ BRAIN_DIR = os.path.expanduser("~/.gemini/antigravity/brain")
 def prune_expired_watermarks(brain_dir=BRAIN_DIR):
     _prune(brain_dir)
 
-if __name__ == "__main__":
+def main():
+    from core.logger import set_trace_id
+    import uuid
+    set_trace_id(f"c_{uuid.uuid4().hex[:8]}")
     prune_expired_watermarks(BRAIN_DIR)
+
+if __name__ == "__main__":
+    main()
 

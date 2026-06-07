@@ -1,4 +1,4 @@
-from core.logger import error as log_error
+from core.logger import warn as log_warn, error as log_error
 
 from core.storage.connection import _get_conn, closing
 
@@ -34,7 +34,7 @@ def run_topic_garbage_collection() -> None:
                     conn.execute("DELETE FROM project_topics WHERE uuid=? AND topic_id=?", (uuid, topic_id))
                     print(f"[Remora GC] Pruned cold auto topic: {topic_id} in project {uuid}")
     except Exception as e:
-        log_error(f"Error running topic garbage collection: {e}")
+        log_warn(f"topic garbage collection: {e}")
         import sys
         sys.exit(1)
 
@@ -46,7 +46,7 @@ def prune_expired_watermarks(brain_dir: str) -> None:
         import os
         import sys
         if not os.path.isdir(brain_dir):
-            log_error(f"[Remora] Invalid brain_dir {brain_dir}, aborting prune to prevent data loss.")
+            log_warn(f"Invalid brain_dir {brain_dir}, aborting prune to prevent data loss.")
             return
 
         with closing(_get_conn()) as conn:
@@ -90,7 +90,7 @@ def prune_expired_watermarks(brain_dir: str) -> None:
                         conn.execute("DELETE FROM topic_decisions WHERE conversation_id=?", (conv_id,))
                         print(f"[Remora] 水印回收已清除会话 ({reason}): {conv_id}")
     except Exception as e:
-        log_error(f"Error pruning expired watermarks: {e}")
+        log_warn(f"pruning expired watermarks: {e}")
         import sys
         sys.exit(1)
 
@@ -106,5 +106,5 @@ def cleanup_ghost_messages() -> int:
                     conn.execute("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")
                 return deleted
     except Exception as e:
-        log_error(f"Error in cleanup_ghost_messages: {e}")
+        log_warn(f"cleanup_ghost_messages: {e}")
         return 0

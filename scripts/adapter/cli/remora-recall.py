@@ -2,6 +2,9 @@
 import sys, os, re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 def main():
+    from core.logger import set_trace_id
+    import uuid
+    set_trace_id(f"c_{uuid.uuid4().hex[:8]}")
     if len(sys.argv) < 2:
         print("Usage: remora-recall.py <keyword> [project_uuid]")
         sys.exit(1)

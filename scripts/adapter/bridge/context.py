@@ -3,9 +3,10 @@ import json
 import functools
 import time
 import os
+import uuid
 from datetime import datetime
 from adapter.bridge.profiler import HookProfiler
-from core.logger import warn, error
+from core.logger import warn, error, debug
 
 _active_profiler = None
 
@@ -24,6 +25,9 @@ def hook_entrypoint(fallback_result=None):
             t0 = time.perf_counter()
             hook_name = func.__code__.co_filename
             hook_name = os.path.basename(hook_name) if hook_name else "unknown_hook"
+            debug(f"hook {hook_name} started")
+            from core.logger import set_trace_id
+            set_trace_id(f"h_{uuid.uuid4().hex[:8]}")
             
             try:
                 input_data = json.load(sys.stdin)
