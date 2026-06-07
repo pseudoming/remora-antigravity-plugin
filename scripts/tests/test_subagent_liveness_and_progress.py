@@ -465,3 +465,134 @@ def test_liveness_with_watermarks_and_timeframe(mock_env, monkeypatch, capsys):
     # Only sub_active should be audited because sub_stale is too old, and sub_wrong_project is wrong project
     assert audited_sub_ids == [sub_active]
 
+
+# ======== Coverage gap tests: parse_sqlite_timestamp edge cases ========
+
+def test_parse_ts_none():
+    assert liveness_checker.parse_sqlite_timestamp(None) == 0.0
+
+def test_parse_ts_numeric():
+    assert liveness_checker.parse_sqlite_timestamp(12345) == 12345.0
+    assert liveness_checker.parse_sqlite_timestamp(12345.67) == 12345.67
+
+def test_parse_ts_unrecognized():
+    assert liveness_checker.parse_sqlite_timestamp("garbage") == 0.0
+
+
+# ======== Coverage gap tests: CLI mode branches & edge cases ========
+
+def test_progress_corrupted(mock_env, monkeypatch, capsys):
+    tmp_path, _ = mock_env
+    conv_id = "conv_corrupted"
+    progress_dir = Path(tmp_path) / ".gemini" / "antigravity" / "brain" / conv_id / "scratch"
+    progress_dir.mkdir(parents=True, exist_ok=True)
+    with open(progress_dir / "progress.json", "w") as f:
+        f.write("not valid json")
+    monkeypatch.setattr(sys, "argv", ["check-subagents-liveness.py", conv_id])
+    with pytest.raises(SystemExit) as excinfo:
+        liveness_checker.main()
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    res = json.loads(captured.out.strip())
+    assert res["liveness"] == "dead"
+
+def test_db_blocked_keyword(mock_env, monkeypatch, capsys):
+    tmp_path, db_path = mock_env
+    conv_id = "conv_db_blocked"
+    progress_dir = Path(tmp_path) / ".gemini" / "antigravity" / "brain" / conv_id / "scratch"
+    progress_dir.mkdir(parents=True, exist_ok=True)
+    with open(progress_dir / "progress.json", "w") as f:
+        json.dump({"status": "running", "last_updated_at": int(time.time() - 10)}, f)
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO messages (conversation_id, line_number, timestamp, role, content) VALUES (?, ?, ?, ?, ?)",
+        (conv_id, 1, time.time(), "tool", "permission_denied: cannot execute")
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(sys, "argv", ["check-subagents-liveness.py", conv_id])
+    with pytest.raises(SystemExit) as excinfo:
+        liveness_checker.main()
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    res = json.loads(captured.out.strip())
+    assert res["liveness"] == "dead"
+    assert "Fatal block" in res["reason"]
+
+def test_db_query_exception(mock_env, monkeypatch, capsys):
+    tmp_path, db_path = mock_env
+    conv_id = "conv_db_exc"
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("DROP TABLE messages")
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(sys, "argv", ["check-subagents-liveness.py", conv_id])
+    with pytest.raises(SystemExit) as excinfo:
+        liveness_checker.main()
+    assert excinfo.value.code == 0
+    captured = capsys.readouterr()
+    res = json.loads(captured.out.strip())
+    assert res["liveness"] == "alive"
+
+def test_progress_invalid_timestamp(mock_env, monkeypatch, capsys):
+    tmp_path, _ = mock_env
+    conv_id = "conv_invalid_ts"
+    progress_dir = Path(tmp_path) / ".gemini" / "antigravity" / "brain" / conv_id / "scratch"
+    progress_dir.mkdir(parents=True, exist_ok=True)
+    with open(progress_dir / "progress.json", "w") as f:
+        json.dump({"status": "running", "last_updated_at": "invalid"}, f)
+    monkeypatch.setattr(sys, "argv", ["check-subagents-liveness.py", conv_id])
+    with pytest.raises(SystemExit) as excinfo:
+        liveness_checker.main()
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    res = json.loads(captured.out.strip())
+    assert res["liveness"] == "dead"
+    assert "no valid timestamp" in res["reason"]
+
+def test_heavy_task_threshold(mock_env, monkeypatch, capsys):
+    tmp_path, _ = mock_env
+    conv_id = "conv_heavy"
+    progress_dir = Path(tmp_path) / ".gemini" / "antigravity" / "brain" / conv_id / "scratch"
+    progress_dir.mkdir(parents=True, exist_ok=True)
+    with open(progress_dir / "progress.json", "w") as f:
+        json.dump({
+            "status": "running",
+            "last_updated_at": int(time.time() - 150),
+            "details": "run_command: building project"
+        }, f)
+    monkeypatch.setattr(sys, "argv", ["check-subagents-liveness.py", conv_id])
+    with pytest.raises(SystemExit) as excinfo:
+        liveness_checker.main()
+    assert excinfo.value.code == 0
+    captured = capsys.readouterr()
+    res = json.loads(captured.out.strip())
+    assert res["liveness"] == "alive"
+
+def test_db_not_exists(mock_env, monkeypatch, capsys):
+    tmp_path, db_path = mock_env
+    conv_id = "conv_no_db"
+    os.remove(db_path)
+    monkeypatch.setattr(sys, "argv", ["check-subagents-liveness.py", conv_id])
+    with pytest.raises(SystemExit) as excinfo:
+        liveness_checker.main()
+    assert excinfo.value.code == 0
+    captured = capsys.readouterr()
+    res = json.loads(captured.out.strip())
+    assert res["liveness"] == "alive"
+
+def test_glob_worktree_short_id_match(mock_env, monkeypatch, capsys):
+    tmp_path, _ = mock_env
+    conv_id = "conv_glob_match_12345"
+    short_id = conv_id[:8]
+    worktree_dir = Path(tmp_path) / ".gemini" / "antigravity" / "brain" / "some_parent" / ".system_generated" / "worktrees" / f"worktree_{short_id}" / "scratch"
+    worktree_dir.mkdir(parents=True, exist_ok=True)
+    with open(worktree_dir / "progress.json", "w") as f:
+        json.dump({"status": "completed", "last_updated_at": int(time.time() - 10)}, f)
+    monkeypatch.setattr(sys, "argv", ["check-subagents-liveness.py", conv_id])
+    with pytest.raises(SystemExit) as excinfo:
+        liveness_checker.main()
+    assert excinfo.value.code == 0
+

@@ -40,6 +40,7 @@ def setup_db(monkeypatch):
                     status TEXT DEFAULT 'open',
                     summary TEXT,
                     source TEXT DEFAULT 'auto',
+                    associated_files TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     last_accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY(uuid, topic_id)
@@ -66,6 +67,13 @@ def setup_db(monkeypatch):
                     timestamp DATETIME
                 );
                 CREATE VIRTUAL TABLE messages_fts USING fts5(content, content_rowid='id');
+                CREATE TABLE runtime_hook_state (
+                    session_id TEXT NOT NULL,
+                    turn_idx INTEGER NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT,
+                    PRIMARY KEY(session_id, turn_idx, key)
+                );
             """)
     
     yield
@@ -284,3 +292,248 @@ def test_prune_expired_watermarks(tmp_path):
         assert len(decisions) == 2
         assert decisions[0][0] == 'c1'
         assert decisions[1][0] == 'c4'
+
+
+def test_check_db_exists():
+    assert dao.check_db_exists() == True
+    os.remove(TEST_DB_PATH)
+    assert dao.check_db_exists() == False
+
+
+def test_switch_topic():
+    dao.create_or_update_topic("proj_1", "topic_A", "Topic A")
+    assert dao.get_active_topic("proj_1") == "topic_A"
+    dao.switch_topic("proj_1", "topic_B")
+    assert dao.get_active_topic("proj_1") == "topic_B"
+    topics = dao.get_topics_by_uuid("proj_1")
+    topic_dict = {t[0]: t[1] for t in topics}
+    assert topic_dict["topic_A"] == "closed"
+    assert topic_dict["topic_B"] == "open"
+    dao.switch_topic("proj_1", "topic_A")
+    assert dao.get_active_topic("proj_1") == "topic_A"
+
+
+def test_topic_associated_files():
+    assert dao.get_topic_associated_files("proj_1", "topic_A") == "[]"
+    dao.create_or_update_topic("proj_1", "topic_A")
+    assert dao.get_topic_associated_files("proj_1", "topic_A") == "[]"
+    dao.update_topic_associated_files("proj_1", "topic_A", '[{"file": "test.py"}]')
+    assert dao.get_topic_associated_files("proj_1", "topic_A") == '[{"file": "test.py"}]'
+
+
+def test_force_cold_start_latest_session():
+    from contextlib import closing
+    dao.write_mode("session_1", "standard")
+    dao.write_mode("session_2", "standard")
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        with conn:
+            conn.execute("UPDATE session_state SET updated_at = datetime('now', '-1 hours') WHERE session_id = 'session_1'")
+    dao.update_cold_start("session_1", 0)
+    dao.force_cold_start_latest_session("session_1")
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        row = conn.execute("SELECT is_cold_start FROM session_state WHERE session_id='session_1'").fetchone()
+        assert row[0] == 1
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        with conn:
+            conn.execute("UPDATE session_state SET updated_at = datetime('now', '-2 hours') WHERE session_id = 'session_1'")
+    dao.update_cold_start("session_2", 0)
+    dao.force_cold_start_latest_session()
+    latest = dao.get_latest_session()
+    assert latest[1] == 1
+    assert latest[0] == "session_2"
+
+
+def test_confirm_decision():
+    from contextlib import closing
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        with conn:
+            conn.execute("INSERT INTO topic_decisions (id, project_uuid, topic_id, decision) VALUES (1, 'proj_1', 'topic_A', 'test')")
+    assert dao.confirm_decision("proj_1", 1) == True
+    assert dao.confirm_decision("proj_1", 999) == False
+
+
+def test_get_topic_id_by_decision():
+    from contextlib import closing
+    assert dao.get_topic_id_by_decision(1) is None
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        with conn:
+            conn.execute("INSERT INTO topic_decisions (id, project_uuid, topic_id, decision) VALUES (1, 'proj_1', 'topic_A', 'test')")
+    assert dao.get_topic_id_by_decision(1) == "topic_A"
+
+
+def test_touch_topic_source_manual():
+    from contextlib import closing
+    dao.create_or_update_topic("proj_1", "topic_A")
+    dao.touch_topic_source_manual("proj_1", "topic_A")
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        row = conn.execute("SELECT source FROM project_topics WHERE uuid='proj_1' AND topic_id='topic_A'").fetchone()
+        assert row[0] == 'manual'
+
+
+def test_get_confirmed_decisions_edge_cases():
+    from contextlib import closing
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        with conn:
+            conn.executescript("""
+                INSERT INTO messages (id, conversation_id, content) VALUES (10, 'c1', 'Exists');
+                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed) VALUES ('proj_1', 'topic_A', 'No files/evidence', 'none', 1);
+                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, associated_files) VALUES ('proj_1', 'topic_A', 'Bad files', 'Broken JSON', 1, 'not-json');
+                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, evidence_msg_ids) VALUES ('proj_1', 'topic_A', 'Bad evidence', 'Wrong format', 1, 'bad-json');
+                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, evidence_msg_ids, associated_files) VALUES ('proj_1', 'topic_A', 'Missing msg', 'No such msg', 1, '[999]', '[{"file": "test.py"}]');
+            """)
+    decisions = dao.get_confirmed_decisions("proj_1", "topic_A")
+    assert len(decisions) == 4
+    assert decisions[0]["files"] == []
+    assert decisions[0]["evidence"] == ""
+    assert decisions[1]["files"] == []
+    assert decisions[2]["evidence"] == ""
+    assert decisions[3]["files"] == ["test.py"]
+    assert decisions[3]["evidence"] == ""
+
+
+def test_recall_decisions_edge_cases():
+    from contextlib import closing
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        with conn:
+            conn.executescript("""
+                INSERT INTO watermarks (conversation_id, project_uuid) VALUES ('conv_1', 'proj_1');
+                INSERT INTO messages (id, conversation_id, topic_id, role, content) VALUES (1, 'conv_1', 'topic_A', 'user', 'hello world');
+                INSERT INTO messages_fts (rowid, content) VALUES (1, 'hello world');
+                INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale) VALUES ('proj_1', 'conv_1', 'topic_A', 'Test decision', 'Test reason');
+                INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale, evidence_msg_ids) VALUES ('proj_1', 'conv_1', 'topic_A', 'Bad evidence', 'Broken', 'not json');
+                INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale, evidence_msg_ids) VALUES ('proj_1', 'conv_1', 'topic_A', 'Missing msg', 'No msg', '[999]');
+                INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale, evidence_msg_ids) VALUES ('proj_1', 'conv_1', 'topic_A', 'Like bad json', 'Test bad json', 'not-json-either');
+                INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale, evidence_msg_ids) VALUES ('proj_1', 'conv_1', 'topic_A', 'Like missing', 'Test no msg', '[111]');
+            """)
+    decisions = dao.recall_decisions_by_fts5_topic("proj_1", "conv_1", "hello")
+    assert len(decisions) == 5
+    decisions = dao.recall_decisions_by_like("proj_1", "conv_1", "Test")
+    assert len(decisions) == 3
+
+
+def test_merge_physical_files_to_topic():
+    import json
+    from contextlib import closing
+    dao.create_or_update_topic("proj_1", "topic_A")
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        with conn:
+            conn.execute("UPDATE project_topics SET associated_files='not-valid-json' WHERE uuid='proj_1' AND topic_id='topic_A'")
+    dao.merge_physical_files_to_topic("proj_1", "topic_A", ["/path/to/fallback.py"])
+    data = json.loads(dao.get_topic_associated_files("proj_1", "topic_A"))
+    assert len(data) == 1
+    assert data[0]["file"] == "/path/to/fallback.py"
+    dao.merge_physical_files_to_topic("proj_1", "topic_A", ["/path/to/file1.py", "/path/to/file2.py"])
+    data = json.loads(dao.get_topic_associated_files("proj_1", "topic_A"))
+    assert len(data) == 3
+    dao.merge_physical_files_to_topic("proj_1", "topic_A", ["/path/to/file1.py"])
+    data = json.loads(dao.get_topic_associated_files("proj_1", "topic_A"))
+    assert len(data) == 3
+    dao.merge_physical_files_to_topic("proj_1", "topic_A", ["/path/to/file3.py"])
+    data = json.loads(dao.get_topic_associated_files("proj_1", "topic_A"))
+    assert len(data) == 4
+    dao.update_topic_associated_files("proj_1", "topic_A", json.dumps([{"file": "/path/to/file1.py", "source": "auto"}]))
+    dao.merge_physical_files_to_topic("proj_1", "topic_A", ["/path/to/file1.py"])
+    data = json.loads(dao.get_topic_associated_files("proj_1", "topic_A"))
+    file1 = [item for item in data if item["file"] == "/path/to/file1.py"][0]
+    assert "physical" in file1["source"]
+
+
+def test_runtime_hook_operations():
+    assert dao.get_runtime_hook_value("s1", 0, "k1") is None
+    dao.set_runtime_hook_value("s1", 0, "k1", "v1")
+    assert dao.get_runtime_hook_value("s1", 0, "k1") == "v1"
+    dao.set_runtime_hook_value("s1", 0, "k1", "v2")
+    assert dao.get_runtime_hook_value("s1", 0, "k1") == "v2"
+    dao.delete_runtime_hook_value("s1", 0, "k1")
+    assert dao.get_runtime_hook_value("s1", 0, "k1") is None
+    dao.set_runtime_hook_value("s1", 0, "k", "v0")
+    dao.set_runtime_hook_value("s1", 1, "k", "v1")
+    dao.trim_runtime_hook_states("s1", 1)
+    assert dao.get_runtime_hook_value("s1", 0, "k") == "v0"
+    assert dao.get_runtime_hook_value("s1", 1, "k") is None
+    assert dao.get_hook_state("s1", 0, "k") == "v0"
+    dao.set_hook_state("s1", 0, "k", "alias")
+    assert dao.get_hook_state("s1", 0, "k") == "alias"
+    dao.delete_hook_state("s1", 0, "k")
+    assert dao.get_hook_state("s1", 0, "k") is None
+    dao.trim_hook_states("s1", 0)
+
+
+def test_common_exceptions(monkeypatch):
+    def broken_conn():
+        raise sqlite3.OperationalError("mock error")
+    monkeypatch.setattr(dao, "_get_conn", broken_conn)
+    assert dao.read_mode("test") == "standard"
+    assert dao.get_latest_session() is None
+    assert dao.get_project_uuid_by_conv("test") is None
+    assert dao.get_active_topic("test") is None
+    assert dao.get_topics_by_uuid("test") == []
+    assert dao.get_confirmed_decisions("test", "test") == []
+    assert dao.get_topic_id_by_decision(999) is None
+    assert dao.get_topic_associated_files("test", "test") == "[]"
+    assert dao.recall_fts5_logs("test", "test", "test") == []
+    assert dao.recall_decisions_by_fts5_topic("test", "test", "test") == []
+    assert dao.recall_decisions_by_like("test", "test", "test") == []
+
+
+def test_runtime_hook_exceptions(monkeypatch):
+    def broken_conn():
+        raise sqlite3.OperationalError("mock error")
+    monkeypatch.setattr(dao, "_get_conn", broken_conn)
+    assert dao.get_runtime_hook_value("test", 0, "key") is None
+    dao.set_runtime_hook_value("test", 0, "key", "val")
+    dao.delete_runtime_hook_value("test", 0, "key")
+    dao.trim_runtime_hook_states("test", 0)
+
+
+def test_gc_exception(monkeypatch):
+    def broken_conn():
+        raise sqlite3.OperationalError("mock error")
+    monkeypatch.setattr(dao, "_get_conn", broken_conn)
+    with pytest.raises(SystemExit):
+        dao.run_topic_garbage_collection()
+
+
+def test_prune_exception(monkeypatch, tmp_path):
+    def broken_conn():
+        raise sqlite3.OperationalError("mock error")
+    monkeypatch.setattr(dao, "_get_conn", broken_conn)
+    with pytest.raises(SystemExit):
+        dao.prune_expired_watermarks(str(tmp_path))
+
+
+def test_prune_expired_watermarks_artifact_sync(tmp_path):
+    from contextlib import closing
+    brain_dir = str(tmp_path)
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        with conn:
+            conn.executescript("""
+                INSERT INTO watermarks (conversation_id, last_msg_id, last_updated) VALUES ('artifact_sync_foo', 1, datetime('now', '-40 days'));
+                INSERT INTO messages (id, conversation_id, timestamp) VALUES (1, 'artifact_sync_foo', datetime('now', '-40 days'));
+            """)
+    dao.prune_expired_watermarks(brain_dir)
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        rows = conn.execute("SELECT conversation_id FROM watermarks WHERE conversation_id='artifact_sync_foo'").fetchall()
+        assert len(rows) == 1
+
+
+def test_prune_expired_watermarks_invalid_dir():
+    dao.prune_expired_watermarks("/nonexistent/path_xyz123")
+
+
+def test_prune_expired_watermarks_no_delete(tmp_path):
+    from contextlib import closing
+    import os
+    brain_dir = str(tmp_path)
+    os.makedirs(os.path.join(brain_dir, 'c1'))
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        with conn:
+            conn.executescript("""
+                INSERT INTO watermarks (conversation_id, last_msg_id, last_updated) VALUES ('c1', 1, datetime('now', '-1 hours'));
+                INSERT INTO messages (id, conversation_id, timestamp) VALUES (1, 'c1', datetime('now', '-1 hours'));
+                INSERT INTO session_state (session_id) VALUES ('c1');
+            """)
+    dao.prune_expired_watermarks(brain_dir)
+    with closing(sqlite3.connect(TEST_DB_PATH, timeout=15)) as conn:
+        rows = conn.execute("SELECT conversation_id FROM watermarks").fetchall()
+        assert len(rows) == 1

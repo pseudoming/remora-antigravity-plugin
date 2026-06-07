@@ -1,4 +1,5 @@
 import os
+import io
 import sqlite3
 import pytest
 from unittest.mock import patch, MagicMock
@@ -238,3 +239,224 @@ def test_get_latest_planner_response_none(mock_extract, temp_home):
     
     cdal = ConversationDataAccessLayer(conv_id)
     assert cdal.get_latest_planner_response() is None
+
+
+# =====================================================================
+# Tests for lib/context.py: hook_entrypoint decorator
+# =====================================================================
+
+import sys as _sys
+import json as _json
+import time as _time
+
+from lib.context import hook_entrypoint, get_profiler, _active_profiler
+
+
+def test_hook_entrypoint_default_fallback():
+    @hook_entrypoint()
+    def dummy_hook(input_data):
+        return {"decision": "allow"}
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"toolCall": {"name": "test"}}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit") as mock_exit:
+        dummy_hook()
+        mock_exit.assert_called_once_with(0)
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result["decision"] == "allow"
+
+
+def test_hook_entrypoint_none_fallback_uses_default():
+    @hook_entrypoint(fallback_result=None)
+    def dummy_hook(input_data):
+        return {"decision": "deny", "reason": "test"}
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"toolCall": {"name": "test"}}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit"):
+        dummy_hook()
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result["decision"] == "deny"
+
+
+def test_hook_entrypoint_stdin_json_error():
+    @hook_entrypoint()
+    def dummy_hook(input_data):
+        return {"decision": "allow"}
+
+    with patch.object(_sys, "stdin", io.StringIO("not valid json {{{")), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False):
+        try:
+            dummy_hook()
+        except SystemExit:
+            pass
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result["decision"] == "allow"
+
+
+def test_hook_entrypoint_stdin_json_error_with_log_file():
+    @hook_entrypoint()
+    def dummy_hook(input_data):
+        return {"decision": "allow"}
+
+    with patch.object(_sys, "stdin", io.StringIO("not valid json {{{")), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=True), \
+         patch("builtins.open", create=True):
+        try:
+            dummy_hook()
+        except SystemExit:
+            pass
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result["decision"] == "allow"
+
+
+def test_hook_entrypoint_status_completed():
+    @hook_entrypoint()
+    def dummy_hook(input_data):
+        return {"decision": "allow", "status": "completed", "details": "all done"}
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"transcriptPath": "/tmp/t.jsonl"}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel") as mock_sentinel, \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit"):
+        dummy_hook()
+        mock_sentinel.update.assert_any_call("/tmp/t.jsonl", "completed", details="all done")
+
+
+def test_hook_entrypoint_invocation_non_dict_result():
+    @hook_entrypoint()
+    def dummy_hook(input_data):
+        return "not a dict"
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"invocationNum": 1}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit"):
+        dummy_hook()
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result == {}
+
+
+def test_hook_entrypoint_invocation_with_inject_steps():
+    @hook_entrypoint()
+    def dummy_hook(input_data):
+        return {"injectSteps": [{"ephemeralMessage": "hello"}]}
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"invocationNum": 1}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit"):
+        dummy_hook()
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result == {"injectSteps": [{"ephemeralMessage": "hello"}]}
+
+
+def test_hook_entrypoint_system_exit_code_zero_tool_use():
+    @hook_entrypoint()
+    def dummy_hook(input_data):
+        raise SystemExit(0)
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"toolCall": {"name": "test"}}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit") as mock_exit:
+        dummy_hook()
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result["decision"] == "allow"
+
+
+def test_hook_entrypoint_system_exit_nonzero_non_tool():
+    @hook_entrypoint()
+    def dummy_hook(input_data):
+        raise SystemExit(1)
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"invocationNum": 1}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit") as mock_exit:
+        dummy_hook()
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result == {"injectSteps": []}
+
+
+def test_hook_entrypoint_exception_with_decision_fallback():
+    @hook_entrypoint(fallback_result={"decision": "allow"})
+    def dummy_hook(input_data):
+        raise ValueError("something broke")
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"toolCall": {"name": "test"}}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit"):
+        dummy_hook()
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result["decision"] == "allow"
+        assert "decision_reason" in result
+        assert "Remora Fallback" in result["decision_reason"]
+
+
+def test_hook_entrypoint_exception_no_decision_fallback():
+    @hook_entrypoint(fallback_result={"injectSteps": []})
+    def dummy_hook(input_data):
+        raise ValueError("other error")
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"toolCall": {"name": "test"}}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit"):
+        dummy_hook()
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result["injectSteps"] == []
+
+
+def test_hook_entrypoint_base_exception_non_tool():
+    @hook_entrypoint()
+    def dummy_hook(input_data):
+        raise SystemError("critical")
+
+    with patch.object(_sys, "stdin", io.StringIO(_json.dumps({"invocationNum": 1}))), \
+         patch.object(_sys, "stdout", new=io.StringIO()) as mock_stdout, \
+         patch("lib.progress.ProgressSentinel"), \
+         patch("lib.context.HookProfiler"), \
+         patch("os.path.exists", return_value=False), \
+         patch.object(_sys, "exit"):
+        dummy_hook()
+        output = mock_stdout.getvalue().strip()
+        result = _json.loads(output)
+        assert result == {}
