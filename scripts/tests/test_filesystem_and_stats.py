@@ -1,13 +1,9 @@
 import os
-import sys
 import shutil
 import json
 import pytest
 import subprocess
 from unittest.mock import patch
-
-# Ensure scripts dir is on PATH
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import core.filesystem as filesystem
 import adapter.bridge.stats as stats

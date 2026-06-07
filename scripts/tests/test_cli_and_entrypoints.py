@@ -8,9 +8,6 @@ import sqlite3
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
-# Ensure scripts dir is on PATH
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 def load_module(module_name, file_name):
     scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     file_path = os.path.join(scripts_dir, file_name)
@@ -620,7 +617,7 @@ def test_cognitive_push_pre_tool_use():
 # 14. session-guardian.py
 def test_session_guardian_uninitialized(tmp_path):
     # installed.flag is missing
-    with patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)):
+    with patch("session_guardian.get_data_dir", return_value=str(tmp_path)):
         res = session_guardian.main.__wrapped__({})
         assert len(res["injectSteps"]) == 1
         assert "REMORA FATAL ERROR" in res["injectSteps"][0]["ephemeralMessage"]
@@ -647,7 +644,7 @@ def test_session_guardian_success(tmp_path, capsys):
         {"type": "PLANNER_RESPONSE", "tool_calls": [{"name": "schedule", "args": {"DurationSeconds": "30", "Prompt": "subagent-monitor.py fake_uuid c1"}}]}
     ]
 
-    with patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
+    with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup") as mock_cleanup, \
          patch("session_guardian.get_stats", return_value={"accumulated_source_bytes": 200 * 1024, "accumulated_data_bytes": 10 * 1024}), \

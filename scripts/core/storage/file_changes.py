@@ -1,10 +1,10 @@
 from core.logger import warn as log_warn, error as log_error
 from typing import List, Dict
 
-from core.storage.connection import _get_conn, closing
+from core.storage.connection import get_conn, closing
 
 def insert_file_change(project_uuid: str, conversation_id: str, file_name: str, source: str) -> None:
-    with closing(_get_conn()) as conn:
+    with closing(get_conn()) as conn:
         with conn:
             conn.execute(
                 "INSERT OR IGNORE INTO file_changes (project_uuid, conversation_id, file_name, source) VALUES (?, ?, ?, ?)",
@@ -13,7 +13,7 @@ def insert_file_change(project_uuid: str, conversation_id: str, file_name: str, 
 
 def get_files_by_topic(project_uuid: str, topic_id: str) -> List[str]:
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 rows = conn.execute(
                     """SELECT DISTINCT fc.file_name FROM file_changes fc
@@ -28,7 +28,7 @@ def get_files_by_topic(project_uuid: str, topic_id: str) -> List[str]:
 
 def get_decisions_by_file(project_uuid: str, file_name: str) -> List[Dict]:
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 rows = conn.execute(
                     """SELECT DISTINCT td.decision, td.rationale

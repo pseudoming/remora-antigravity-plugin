@@ -2,12 +2,12 @@ import json
 from core.logger import warn as log_warn, error as log_error
 from typing import List
 
-from core.storage.connection import _get_conn, closing
+from core.storage.connection import get_conn, closing
 
 def recall_fts5_logs(project_uuid: str, conv_id: str, keyword: str, limit: int = 10) -> List[str]:
     try:
         safe_keyword = keyword.replace('"', '""')
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -32,7 +32,7 @@ def recall_decisions_by_fts5_topic(project_uuid: str, conv_id: str, keyword: str
     try:
         import json
         safe_keyword = keyword.replace('"', '""')
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -78,7 +78,7 @@ def recall_decisions_by_like(project_uuid: str, conv_id: str, keyword: str, limi
         # Prevent LIKE wildcard injection
         safe_keyword = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         like_pattern = f"%{safe_keyword}%"
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -109,7 +109,7 @@ def recall_decisions_by_like(project_uuid: str, conv_id: str, keyword: str, limi
         return []
 
 def touch_topics_accessed_by_recall(project_uuid: str, conv_id: str, keyword: str) -> None:
-    with closing(_get_conn()) as conn:
+    with closing(get_conn()) as conn:
         with conn:
             safe_keyword = keyword.replace('"', '""')
             conn.execute("""

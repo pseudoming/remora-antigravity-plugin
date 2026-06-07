@@ -1,6 +1,6 @@
 from core.logger import warn as log_warn, error as log_error
 
-from core.storage.connection import _get_conn, closing
+from core.storage.connection import get_conn, closing
 
 def run_topic_garbage_collection() -> None:
     """
@@ -9,7 +9,7 @@ def run_topic_garbage_collection() -> None:
     """
     try:
         import sys
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 # Obtain EXCLUSIVE lock immediately to prevent Lock Upgrade Deadlocks in daemons
                 conn.execute("BEGIN EXCLUSIVE")
@@ -49,7 +49,7 @@ def prune_expired_watermarks(brain_dir: str) -> None:
             log_warn(f"Invalid brain_dir {brain_dir}, aborting prune to prevent data loss.")
             return
 
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             # First query without exclusive lock
             cursor = conn.execute("""
                 SELECT w.conversation_id 
@@ -69,7 +69,7 @@ def prune_expired_watermarks(brain_dir: str) -> None:
             if not os.path.exists(conv_dir):
                 to_delete.append((conv_id, "文件缺失"))
             else:
-                with closing(_get_conn()) as conn:
+                with closing(get_conn()) as conn:
                     res = conn.execute("""
                         SELECT 1 FROM watermarks w
                         LEFT JOIN messages m ON w.last_msg_id = m.id
@@ -81,7 +81,7 @@ def prune_expired_watermarks(brain_dir: str) -> None:
                         to_delete.append((conv_id, "超期不活跃"))
 
         if to_delete:
-            with closing(_get_conn()) as conn:
+            with closing(get_conn()) as conn:
                 with conn:
                     conn.execute("BEGIN EXCLUSIVE")
                     for conv_id, reason in to_delete:
@@ -96,7 +96,7 @@ def prune_expired_watermarks(brain_dir: str) -> None:
 
 def cleanup_ghost_messages() -> int:
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 cursor = conn.execute(
                     "DELETE FROM messages WHERE role IS NULL OR role = '' OR content IS NULL OR content = ''"

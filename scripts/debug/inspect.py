@@ -10,7 +10,7 @@ import sqlite3
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from lib import dao
-from core.storage.connection import _get_conn, closing
+from core.storage.connection import get_conn, closing, get_db_path
 from adapter.bridge import paths
 
 
@@ -24,7 +24,7 @@ def _resolve_project_uuid(args):
 
 def _get_all_project_uuids():
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 rows = conn.execute("SELECT DISTINCT uuid FROM project_topics").fetchall()
                 project_uuids = [r[0] for r in rows]
@@ -80,7 +80,7 @@ def cmd_file(args):
 
 def cmd_sessions(args):
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 rows = conn.execute(
                     "SELECT session_id, mode, is_cold_start, updated_at FROM session_state ORDER BY updated_at DESC LIMIT 20"
@@ -127,7 +127,7 @@ def cmd_liveness(args):
 
 
 def cmd_sql(args):
-    db_path = paths.get_db_path()
+    db_path = get_db_path()
     if not os.path.exists(db_path):
         print(f"Database not found: {db_path}", file=sys.stderr)
         sys.exit(1)

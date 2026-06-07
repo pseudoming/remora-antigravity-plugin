@@ -1,9 +1,6 @@
 import os
-import sys
 import re
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.phantom import normalize_filepath, ACTION_PATTERNS
 

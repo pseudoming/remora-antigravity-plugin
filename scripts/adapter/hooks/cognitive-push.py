@@ -169,7 +169,7 @@ def main(context):
     
     try:
         args, _ = parser.parse_known_args()
-    except:
+    except Exception:
         return {"injectSteps": []}
         
     transcript_path = context.get('transcriptPath', '')

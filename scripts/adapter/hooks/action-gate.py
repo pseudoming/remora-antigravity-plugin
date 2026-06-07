@@ -12,6 +12,7 @@ from core.filesystem import get_snapshot, get_active_files
 from core.phantom import normalize_filepath, ACTION_PATTERNS
 from adapter.bridge.paths import extract_conv_id
 from adapter.bridge.session import read_mode
+from adapter.bridge.conversation import ConversationDataAccessLayer
 from core.logger import warn, error, debug
 
 # ##########################################################
@@ -90,9 +91,7 @@ def get_physical_modifications(cwd, transcript_path):
     except Exception:
         return set()
 
-from adapter.bridge.conversation import ConversationDataAccessLayer
-
-def get_latest_conversation_states(cdal: ConversationDataAccessLayer, initial_num_steps=0):
+def get_latest_conversation_states(cdal: "ConversationDataAccessLayer", initial_num_steps=0):
     """
     通过 CDAL 原生读取 SQLite，
     提取出最近一次大模型的 PLANNER_RESPONSE 陈述文本以及本次 Invocation 中的物理写入工具调用。

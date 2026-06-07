@@ -53,8 +53,6 @@ def setup_db():
         os.remove(TEST_DB_PATH)
 
 def test_cursor_resume(tmp_path, monkeypatch):
-    import sys
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'scripts')))
     from adapter.bridge.conversation import ConversationDataAccessLayer
     def mock_stream(self, start_idx=0):
         for i in range(1, 11):
@@ -93,8 +91,6 @@ def test_cursor_resume(tmp_path, monkeypatch):
 
 
 def test_proto_role_parsing(tmp_path, monkeypatch):
-    import sys
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'scripts')))
     from adapter.bridge.conversation import ConversationDataAccessLayer
     from adapter.bridge.proto_decoder import extract_step_payload
 

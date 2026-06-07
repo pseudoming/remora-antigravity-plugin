@@ -6,10 +6,6 @@ import unittest
 from unittest.mock import patch, MagicMock
 import importlib.util
 
-# Inject paths
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-
 # Dynamically import hyphenated script
 spec = importlib.util.spec_from_file_location(
     "zombie_detector", 

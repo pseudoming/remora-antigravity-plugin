@@ -1,17 +1,6 @@
-import os
-import sys
 import base64
 import unittest
 from unittest.mock import patch
-
-# Ensure plugin root is in sys.path for coverage to track properly
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
-
-scripts_dir = os.path.join(root_dir, "scripts")
-if scripts_dir not in sys.path:
-    sys.path.insert(0, scripts_dir)
 
 from core.rules import inspector as safety_rules
 

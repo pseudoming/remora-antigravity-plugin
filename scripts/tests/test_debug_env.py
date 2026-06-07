@@ -5,7 +5,6 @@ import importlib.util
 import pytest
 
 _scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, _scripts_dir)
 
 spec = importlib.util.spec_from_file_location(
     "debug_env", os.path.join(_scripts_dir, "debug", "env.py")
@@ -63,6 +62,7 @@ def _make_log_files(log_dir, count):
 def paths(monkeypatch, tmp_path):
     from adapter.bridge import paths as bridge_paths
     from core import logger
+    import core.storage.connection as conn_module
 
     data_dir = tmp_path / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -72,6 +72,7 @@ def paths(monkeypatch, tmp_path):
 
     monkeypatch.setattr(bridge_paths, "find_plugin_root", lambda: str(tmp_path))
     monkeypatch.setattr(bridge_paths, "get_data_dir", lambda: str(data_dir))
+    monkeypatch.setattr(conn_module, "get_db_path", lambda: str(db_path))
     monkeypatch.setattr(bridge_paths, "get_db_path", lambda: str(db_path))
     monkeypatch.setattr(logger, "LOG_DIR", str(log_dir))
     monkeypatch.setattr(sys.modules["core.logger"], "LOG_DIR", str(log_dir))

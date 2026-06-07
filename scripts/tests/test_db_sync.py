@@ -4,17 +4,15 @@ import sqlite3
 import pytest
 import json
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'sidecars', 'memory-compactor')))
 
-from adapter.bridge.paths import get_db_path
-import adapter.bridge.paths as paths
+import core.storage.connection as conn_module
 
 TEST_DB_PATH = "/tmp/test_remora_db_sync.db"
 
 @pytest.fixture(autouse=True)
 def setup_db(monkeypatch):
-    monkeypatch.setattr(paths, "get_db_path", lambda: TEST_DB_PATH)
+    monkeypatch.setattr(conn_module, "get_db_path", lambda: TEST_DB_PATH)
     from schema import schema_init
     monkeypatch.setattr(schema_init, "DB_PATH", TEST_DB_PATH)
     monkeypatch.setattr(schema_init, "DATA_DIR", "/tmp")

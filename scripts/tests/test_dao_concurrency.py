@@ -1,15 +1,10 @@
 import os
-import sys
 import sqlite3
 import pytest
 from unittest.mock import patch
 
-# Ensure scripts dir is on PATH
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from adapter.bridge.paths import get_db_path
 from core.storage.maintenance import prune_expired_watermarks, run_topic_garbage_collection
-import adapter.bridge.paths as paths
+import core.storage.connection as conn_module
 
 @pytest.fixture
 def temp_db(tmp_path, monkeypatch):
@@ -17,7 +12,7 @@ def temp_db(tmp_path, monkeypatch):
     db_path_str = str(db_file)
     
     # Patch get_db_path to return this temp db
-    monkeypatch.setattr(paths, "get_db_path", lambda: db_path_str)
+    monkeypatch.setattr(conn_module, "get_db_path", lambda: db_path_str)
     
     # Initialize basic schema
     with sqlite3.connect(db_path_str) as conn:

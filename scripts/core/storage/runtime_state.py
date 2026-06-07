@@ -1,11 +1,11 @@
 from core.logger import warn as log_warn, error as log_error
 from typing import Optional
 
-from core.storage.connection import _get_conn, closing
+from core.storage.connection import get_conn, closing
 
 def get_runtime_hook_value(session_id: str, turn_idx: int, key: str) -> Optional[str]:
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 row = conn.execute(
                     "SELECT value FROM runtime_hook_state WHERE session_id = ? AND turn_idx = ? AND key = ?",
@@ -18,7 +18,7 @@ def get_runtime_hook_value(session_id: str, turn_idx: int, key: str) -> Optional
 
 def set_runtime_hook_value(session_id: str, turn_idx: int, key: str, value: str) -> None:
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 conn.execute("BEGIN EXCLUSIVE")
                 conn.execute(
@@ -31,7 +31,7 @@ def set_runtime_hook_value(session_id: str, turn_idx: int, key: str, value: str)
 
 def delete_runtime_hook_value(session_id: str, turn_idx: int, key: str) -> None:
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 conn.execute("BEGIN EXCLUSIVE")
                 conn.execute(
@@ -43,7 +43,7 @@ def delete_runtime_hook_value(session_id: str, turn_idx: int, key: str) -> None:
 
 def trim_runtime_hook_states(session_id: str, current_turn_idx: int) -> None:
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 conn.execute("BEGIN EXCLUSIVE")
                 conn.execute(

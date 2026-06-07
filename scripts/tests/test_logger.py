@@ -1,12 +1,8 @@
 import os
-import sys
 import importlib
 from datetime import datetime, timedelta
 
 import pytest
-
-# Ensure scripts dir is on path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 @pytest.fixture(autouse=True)

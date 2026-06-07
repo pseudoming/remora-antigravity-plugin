@@ -8,8 +8,6 @@ from unittest.mock import patch, MagicMock
 # Ensure scripts directory is in PYTHONPATH
 current_dir = os.path.dirname(os.path.abspath(__file__))
 scripts_dir = os.path.dirname(current_dir)
-if scripts_dir not in sys.path:
-    sys.path.insert(0, scripts_dir)
 
 import importlib
 # safety-check now lives in hooks/, add it to path for module import

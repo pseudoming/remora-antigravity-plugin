@@ -50,7 +50,8 @@ def main():
 
     # ── PLUGIN_ROOT / DATA_DIR / DB_PATH ──
     try:
-        from adapter.bridge.paths import find_plugin_root, get_data_dir, get_db_path
+        from adapter.bridge.paths import find_plugin_root, get_data_dir
+        from core.storage.connection import get_db_path
         plugin_root = find_plugin_root()
         data_dir = get_data_dir()
         db_path = get_db_path()

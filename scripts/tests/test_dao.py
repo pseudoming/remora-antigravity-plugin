@@ -1,13 +1,8 @@
 import os
 import sqlite3
 import pytest
-import sys
-
-# Ensure lib is importable
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.storage.connection import check_db_exists
-from adapter.bridge.paths import get_db_path
 from core.storage.decisions import confirm_decision, get_confirmed_decisions, get_topic_id_by_decision
 from core.storage.file_changes import get_decisions_by_file, get_files_by_topic, insert_file_change
 from core.storage.maintenance import prune_expired_watermarks, run_topic_garbage_collection
@@ -16,13 +11,13 @@ from core.storage.runtime_state import delete_hook_state, delete_runtime_hook_va
 from core.storage.sessions import delete_session, force_cold_start_latest_session, get_latest_session, read_mode, update_cold_start, write_mode
 from core.storage.topics import close_topic, create_or_update_topic, get_active_topic, get_topic_associated_files, get_topics_by_uuid, merge_physical_files_to_topic, switch_topic, touch_topic_source_manual, update_topic_associated_files
 from core.storage.watermarks import get_project_uuid_by_conv
-import adapter.bridge.paths as paths
+import core.storage.connection as conn_module
 
 TEST_DB_PATH = "/tmp/test_remora_dao.db"
 
 @pytest.fixture(autouse=True)
 def setup_db(monkeypatch):
-    monkeypatch.setattr(paths, "get_db_path", lambda: TEST_DB_PATH)
+    monkeypatch.setattr(conn_module, "get_db_path", lambda: TEST_DB_PATH)
     if os.path.exists(TEST_DB_PATH):
         os.remove(TEST_DB_PATH)
         

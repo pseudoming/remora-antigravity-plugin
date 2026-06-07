@@ -3,13 +3,11 @@ import sys
 import sqlite3
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'adapter', 'maintenance')))
 
 from unittest.mock import patch
 
-from adapter.bridge.paths import get_db_path
-import adapter.bridge.paths as paths
+import core.storage.connection as conn_module
 import cleanup_ghost_records
 
 @pytest.fixture
@@ -51,7 +49,7 @@ def test_fix_db_no_ghost_records(test_db, capsys):
         conn.execute("INSERT INTO messages (conversation_id, line_number, role, content) VALUES ('conv1', 1, 'user', 'hello')")
         conn.commit()
 
-    with patch.object(paths, 'get_db_path', return_value=test_db), \
+    with patch.object(conn_module, 'get_db_path', return_value=test_db), \
          patch("cleanup_ghost_records.info") as mock_info:
         cleanup_ghost_records.fix_db()
         mock_info.assert_any_call("No ghost records to clean up.")
@@ -70,7 +68,7 @@ def test_fix_db_with_ghost_records(test_db, capsys):
         conn.execute("INSERT INTO messages (conversation_id, line_number, role, content) VALUES ('conv1', 5, 'assistant', '')")
         conn.commit()
 
-    with patch.object(paths, 'get_db_path', return_value=test_db), \
+    with patch.object(conn_module, 'get_db_path', return_value=test_db), \
          patch("cleanup_ghost_records.info") as mock_info:
         cleanup_ghost_records.fix_db()
         mock_info.assert_any_call("Deleted 4 ghost records. FTS index rebuilt.")

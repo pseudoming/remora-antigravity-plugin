@@ -8,6 +8,8 @@ from core.logger import warn, error
 import json, re, subprocess
 from adapter.bridge.subagent import get_subagent_type, AGENTAPI_BIN
 from core.liveness import clean_system_reminders, detect_mode, HARD_KEYWORDS, SOFT_KEYWORDS
+from adapter.bridge.paths import get_data_dir, extract_conv_id, find_plugin_root
+from lib import dao
 
 @hook_entrypoint(fallback_result={"injectSteps": [{"ephemeralMessage": "<system-reminder>⚠️ Remora Session Guardian 发生异常。状态同步防线已降级，但不影响正常对话。</system-reminder>"}]})
 def main(context):
@@ -15,7 +17,6 @@ def main(context):
     scripts_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if scripts_dir not in sys.path:
         sys.path.insert(0, scripts_dir)
-    from adapter.bridge.paths import get_data_dir
     initialized_file = os.path.join(get_data_dir(), ".runtime", "installed.flag")
     if not os.path.exists(initialized_file):
         return {"injectSteps": [{"ephemeralMessage": "🚨 **[REMORA FATAL ERROR]** Plugin uninitialized! Please run `python3 install.py` in the plugin root."}]}
@@ -27,12 +28,11 @@ def main(context):
         try:
             with open(os.path.join(get_data_dir(), ".runtime", "remora_agent_env.json"), "w", encoding="utf-8") as ef:
                 json.dump({"ANTIGRAVITY_LS_ADDRESS": ls_addr, "ANTIGRAVITY_CSRF_TOKEN": csrf_token}, ef)
-        except:
+        except Exception:
             pass
             
     transcript_path = context.get('transcriptPath')
     
-    from adapter.bridge.paths import extract_conv_id
 
 
     # 提取当前会话 ID
@@ -50,7 +50,7 @@ def main(context):
                 if should_write:
                     with open(main_id_file, "w") as mf:
                         mf.write(conv_id)
-            except:
+            except Exception:
                 pass
                 
     from adapter.bridge.conversation import ConversationDataAccessLayer
@@ -78,7 +78,6 @@ def main(context):
     except Exception:
         pass
     
-    # 动态读取 keywords.json 获取触发词
     keywords_config_path = os.path.join(os.path.dirname(__file__), 'keywords.json')
     hard_kws = []
     soft_kws = []
@@ -87,10 +86,8 @@ def main(context):
             config = json.load(f)
             hard_kws = config.get("hard_keywords", [])
             soft_kws = config.get("soft_keywords", [])
-    except:
+    except Exception:
         pass
-        
-
         
     inject_steps = []
     
@@ -174,7 +171,7 @@ def main(context):
                     retry_file = os.path.join(get_data_dir(), ".runtime", f"remora_subagent_retries_{conv_id}.json")
                     if os.path.exists(retry_file):
                         os.remove(retry_file)
-                except:
+                except Exception:
                     pass
         except Exception:
             pass
@@ -184,21 +181,19 @@ def main(context):
                          (latest_schedule_index == -1 or latest_subagent_activity_index < latest_schedule_index))
                          
     if subagent_uuid and not subagent_finish_detected and (not has_schedule_after or is_timer_canceled):
-        from adapter.bridge.paths import find_plugin_root
         plugin_root = find_plugin_root()
         python_bin = sys.executable or "/usr/bin/python3"
         
         # 提取子会话的角色名称 (优先通过 agentapi，其次通过历史记录)
         role_name = None
         try:
-            from adapter.bridge.paths import get_data_dir
             env = dict(os.environ)
             if os.path.exists(os.path.join(get_data_dir(), ".runtime", "remora_agent_env.json")):
                 try:
                     with open(os.path.join(get_data_dir(), ".runtime", "remora_agent_env.json"), "r", encoding="utf-8") as ef:
                         cached_env = json.load(ef)
                         env.update(cached_env)
-                except:
+                except Exception:
                     pass
             cmd = [AGENTAPI_BIN, "get-conversation-metadata", subagent_uuid]
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
@@ -273,7 +268,6 @@ def main(context):
         
     # 跨进程状态机同步 (写入 SQLite session_state 同步表，支持多拦截器 IPC)
     # 首次插入 is_cold_start = 1，更新时保持原有 is_cold_start，将其消费职责留给 Phase 26
-    from lib import dao
     dao.write_mode(conv_id, mode)
 
     # ==========================================

@@ -18,9 +18,10 @@ def get_data_dir():
     return os.path.expanduser("~/.remora/data")
 
 def get_db_path():
-    return os.path.join(get_data_dir(), "remora_memory.db")
+    from core.storage.connection import get_db_path as _core_get_db_path
+    return _core_get_db_path()
 
-HOOKS_PROFILE_LOG = os.path.join(get_data_dir(), "hooks_profile.log")
+from core.logger import _HOOKS_PROFILE_LOG as HOOKS_PROFILE_LOG
 
 import re
 

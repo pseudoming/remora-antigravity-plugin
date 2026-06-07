@@ -9,6 +9,11 @@ LOG_DIR = "/tmp/remora/log"
 MAX_AGE_DAYS = 3
 _TRACE_ID = f"s_{uuid.uuid4().hex[:8]}"
 
+_HOOKS_PROFILE_LOG = os.environ.get(
+    "REMORA_HOOKS_PROFILE_LOG",
+    os.path.join(os.path.expanduser("~"), ".remora", "data", "hooks_profile.log")
+)
+
 _LEVEL_ENV = os.environ.get("REMORA_LOG_LEVEL", "INFO").upper()
 _LEVELS = {"DEBUG": 0, "INFO": 1, "WARN": 2, "ERROR": 3, "OFF": 4}
 _LEVEL = _LEVELS.get(_LEVEL_ENV, 1)
@@ -135,8 +140,7 @@ def profile(msg, log_path=None):
         _write_raw(log_path, msg)
     elif isinstance(msg, str) and msg.strip().startswith("==="):
         try:
-            from adapter.bridge.paths import HOOKS_PROFILE_LOG
-            _write_raw(HOOKS_PROFILE_LOG, msg)
+            _write_raw(_HOOKS_PROFILE_LOG, msg)
         except Exception:
             pass
     else:

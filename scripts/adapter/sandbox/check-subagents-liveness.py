@@ -2,7 +2,6 @@
 import sys
 import os
 import json
-import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,10 +11,10 @@ scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if scripts_dir not in sys.path:
     sys.path.insert(0, scripts_dir)
 
-from adapter.bridge import paths
 from lib import dao
 from core.logger import warn, debug
 from core.liveness import parse_sqlite_timestamp, find_all_uuids
+from core.storage.messages import get_latest_non_user_messages
 
 def run_audit(conv_id: str, parent_conv_id: str = None) -> dict:
     # 1. 物理读取 progress.json
@@ -45,50 +44,32 @@ def run_audit(conv_id: str, parent_conv_id: str = None) -> dict:
         except Exception as e:
             warn(f"{str(e)}")
             
-    # 2. 读取 sqlite 数据库中的 messages 表
-    db_path = paths.get_db_path()
-    db_exists = os.path.exists(db_path)
-    
+    # 2. 读取 messages 表（通过 DAO）
     latest_msg_ts = 0.0
     latest_msg_role = None
     latest_msg_content = None
     db_blocked = False
     db_blocked_reason = ""
-    
-    if db_exists:
-        try:
-            conn = sqlite3.connect(db_path, timeout=15)
-            cursor = conn.cursor()
-            
-            # 查询最近非用户的子特工 5 条心跳记录
-            query = """
-                SELECT timestamp, role, content 
-                FROM messages 
-                WHERE conversation_id = ? 
-                  AND role NOT IN ('USER', 'USER_INPUT', 'USER_EXPLICIT', 'user') 
-                  AND content IS NOT NULL 
-                  AND content != '' 
-                ORDER BY line_number DESC, id DESC 
-                LIMIT 5
-            """
-            cursor.execute(query, (conv_id,))
-            rows = cursor.fetchall()
-            if rows:
-                ts_val, role, content = rows[0]
-                latest_msg_ts = parse_sqlite_timestamp(ts_val)
-                latest_msg_role = role
-                latest_msg_content = content[:100] + "..." if len(content) > 100 else content
-                
-                # 扫描这 5 条消息是否含有致命阻碍标志
-                for _, _, content_str in rows:
-                    content_lower = content_str.lower()
-                    if any(kw in content_lower for kw in ("permission_denied", "tool_missing", "permission denied", "remora safety intercept", "exit status", "unknown tool name")):
-                        db_blocked = True
-                        db_blocked_reason = f"Fatal block in messages: {content_str[:80]}"
-                        break
-            conn.close()
-        except Exception as e:
-            warn(f"{str(e)}")
+
+    try:
+        rows = get_latest_non_user_messages(conv_id, limit=5)
+        if rows:
+            ts_val = rows[0].get('timestamp')
+            role = rows[0].get('role')
+            content = rows[0].get('content', '')
+            latest_msg_ts = parse_sqlite_timestamp(ts_val)
+            latest_msg_role = role
+            latest_msg_content = content[:100] + "..." if len(content) > 100 else content
+
+            for row in rows:
+                content_str = row.get('content', '')
+                content_lower = content_str.lower()
+                if any(kw in content_lower for kw in ("permission_denied", "tool_missing", "permission denied", "remora safety intercept", "exit status", "unknown tool name")):
+                    db_blocked = True
+                    db_blocked_reason = f"Fatal block in messages: {content_str[:80]}"
+                    break
+    except Exception as e:
+        warn(f"{str(e)}")
  
     # 3. 判定逻辑
     status = progress_data.get("status")

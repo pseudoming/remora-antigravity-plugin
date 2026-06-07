@@ -5,8 +5,7 @@ import sqlite3
 import pytest
 from unittest.mock import patch
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
+import core.storage.connection as conn_module
 import adapter.bridge.paths as paths_module
 
 SCHEMA = """
@@ -70,7 +69,7 @@ CREATE TABLE IF NOT EXISTS messages (
 @pytest.fixture
 def temp_db(tmp_path, monkeypatch):
     db_path = str(tmp_path / "remora_memory.db")
-    monkeypatch.setattr(paths_module, "get_db_path", lambda: db_path)
+    monkeypatch.setattr(conn_module, "get_db_path", lambda: db_path)
     monkeypatch.setattr(paths_module, "get_data_dir", lambda: str(tmp_path))
     conn = sqlite3.connect(db_path)
     conn.executescript(SCHEMA)

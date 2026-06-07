@@ -2,11 +2,11 @@ import json
 from core.logger import warn as log_warn, error as log_error
 from typing import Optional, List, Tuple
 
-from core.storage.connection import _get_conn, closing
+from core.storage.connection import get_conn, closing
 
 def get_active_topic(project_uuid: str) -> Optional[str]:
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 row = conn.execute("SELECT topic_id FROM project_topics WHERE uuid=? AND status='open' LIMIT 1", (project_uuid,)).fetchone()
                 return row[0] if row else None
@@ -15,7 +15,7 @@ def get_active_topic(project_uuid: str) -> Optional[str]:
         return None
 
 def create_or_update_topic(project_uuid: str, topic_id: str, summary: str = "", source: str = "auto") -> None:
-    with closing(_get_conn()) as conn:
+    with closing(get_conn()) as conn:
         with conn:
             conn.execute(
                 "INSERT INTO project_topics (uuid, topic_id, status, summary, source, last_accessed_at) "
@@ -25,7 +25,7 @@ def create_or_update_topic(project_uuid: str, topic_id: str, summary: str = "", 
             )
 
 def switch_topic(project_uuid: str, new_topic_id: str) -> None:
-    with closing(_get_conn()) as conn:
+    with closing(get_conn()) as conn:
         with conn:
             conn.execute("UPDATE project_topics SET status='closed' WHERE uuid=?", (project_uuid,))
             conn.execute(
@@ -35,7 +35,7 @@ def switch_topic(project_uuid: str, new_topic_id: str) -> None:
             )
 
 def close_topic(project_uuid: str, topic_id: str) -> None:
-    with closing(_get_conn()) as conn:
+    with closing(get_conn()) as conn:
         with conn:
             conn.execute(
                 "UPDATE project_topics SET status='closed', source='manual', last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?",
@@ -45,7 +45,7 @@ def close_topic(project_uuid: str, topic_id: str) -> None:
 def get_topics_by_uuid(project_uuid: str) -> List[Tuple[str, str, str]]:
     """Returns [(topic_id, status, summary)]"""
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 return conn.execute("SELECT topic_id, status, summary FROM project_topics WHERE uuid=? ORDER BY created_at DESC", (project_uuid,)).fetchall()
     except Exception as e:
@@ -54,7 +54,7 @@ def get_topics_by_uuid(project_uuid: str) -> List[Tuple[str, str, str]]:
 
 def get_topic_associated_files(project_uuid: str, topic_id: str) -> str:
     try:
-        with closing(_get_conn()) as conn:
+        with closing(get_conn()) as conn:
             with conn:
                 row = conn.execute("SELECT associated_files FROM project_topics WHERE uuid=? AND topic_id=?", (project_uuid, topic_id)).fetchone()
                 return row[0] if (row and row[0]) else "[]"
@@ -63,12 +63,12 @@ def get_topic_associated_files(project_uuid: str, topic_id: str) -> str:
         return "[]"
 
 def update_topic_associated_files(project_uuid: str, topic_id: str, files_json: str) -> None:
-    with closing(_get_conn()) as conn:
+    with closing(get_conn()) as conn:
         with conn:
             conn.execute("UPDATE project_topics SET associated_files=? WHERE uuid=? AND topic_id=?", (files_json, project_uuid, topic_id))
 
 def touch_topic_source_manual(project_uuid: str, topic_id: str) -> None:
-    with closing(_get_conn()) as conn:
+    with closing(get_conn()) as conn:
         with conn:
             conn.execute(
                 "UPDATE project_topics SET source='manual', last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?",
@@ -77,7 +77,7 @@ def touch_topic_source_manual(project_uuid: str, topic_id: str) -> None:
 
 def merge_physical_files_to_topic(project_uuid: str, topic_id: str, physical_files: List[str]) -> None:
     import json
-    with closing(_get_conn()) as conn:
+    with closing(get_conn()) as conn:
         with conn:
             conn.execute("BEGIN EXCLUSIVE")
             row = conn.execute("SELECT associated_files FROM project_topics WHERE uuid=? AND topic_id=?", (project_uuid, topic_id)).fetchone()

@@ -11,12 +11,10 @@ from datetime import datetime, timezone
 
 # Ensure scripts dir and lib are importable
 scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if scripts_dir not in sys.path:
-    sys.path.insert(0, scripts_dir)
 
 from adapter.bridge.progress import ProgressSentinel
+import core.storage.connection as conn_module
 import adapter.bridge.paths as paths
-from adapter.bridge.paths import get_db_path
 
 # Dynamically import hyphenated script: check-subagents-liveness.py
 liveness_script_path = os.path.join(scripts_dir, "adapter", "sandbox", "check-subagents-liveness.py")
@@ -32,6 +30,7 @@ def mock_env(tmp_path, monkeypatch):
     
     # Mock db path to use a temporary db inside tmp_path
     temp_db_path = os.path.join(tmp_path, "test_remora_memory.db")
+    monkeypatch.setattr(conn_module, "get_db_path", lambda: temp_db_path)
     monkeypatch.setattr(paths, "get_db_path", lambda: temp_db_path)
     
     # Initialize the temp DB structure

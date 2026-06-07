@@ -20,7 +20,7 @@ def _force_cold_start():
         try:
             with open(os.path.join(get_data_dir(), ".runtime", "remora_main_conv_id.txt"), "r") as mf:
                 main_conv_id = mf.read().strip()
-        except:
+        except Exception:
             pass
     dao.force_cold_start_latest_session(main_conv_id)
 
