@@ -23,7 +23,7 @@
   1. 拦截器被唤醒，验证 `{data_dir}/.runtime/installed.flag` 是否存在，若不存在则直接放行。
   2. 从 `stdin` 读取上下文 JSON，解析出当前 `conversationId` 和最近的对话历史。
   3. 查询 `watermarks` 获取会话对应的 `project_uuid`。
-  4. 读取 `{PLUGIN_ROOT}/scripts/adapter/hooks/keywords.json` 中配置的模式词（如 `[strict]`、`[relax]`）。若用户发言中包含对应词，则更新 `session_state` 的 `mode` 列。
+  4. 读取 `{PLUGIN_ROOT}/conf/keywords.json` 中配置的模式词（如 `[strict]`、`[relax]`）。若用户发言中包含对应词，则更新 `session_state` 的 `mode` 列。
   5. 审计子特工状态，如果子特工正在运行且对应的 `schedule` 计时器丢失，则向大模型注入引导使用 `schedule` 的 `injectSteps`。
   6. 校验只读累积量，若超过阈值（Source 150KB，Data 50KB），注入超限软警告提示词。
 * **Mermaid 流程图**：

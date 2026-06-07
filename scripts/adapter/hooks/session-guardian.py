@@ -78,7 +78,7 @@ def main(context):
     except Exception:
         pass
     
-    keywords_config_path = os.path.join(os.path.dirname(__file__), 'keywords.json')
+    keywords_config_path = os.path.join(find_plugin_root(), 'conf', 'keywords.json')
     hard_kws = []
     soft_kws = []
     try:

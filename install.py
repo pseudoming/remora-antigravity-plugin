@@ -47,10 +47,10 @@ def render_all_templates(plugin_root):
     """Render all .template files in the plugin tree."""
 
     templates = [
-        (f"{plugin_root}/hooks.template.json", f"{plugin_root}/hooks.json"),
-        (f"{plugin_root}/sidecars/memory-compactor/sidecar.template.json",
+        (f"{plugin_root}/conf/templates/hooks.template.json", f"{plugin_root}/hooks.json"),
+        (f"{plugin_root}/conf/templates/sidecar.template.json",
          f"{plugin_root}/sidecars/memory-compactor/sidecar.json"),
-        (f"{plugin_root}/skills/remora-architecture/SKILL.template.md",
+        (f"{plugin_root}/conf/templates/SKILL.template.md",
          f"{plugin_root}/skills/remora-architecture/SKILL.md"),
     ]
 

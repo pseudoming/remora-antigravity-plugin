@@ -6,8 +6,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 
 _KEYWORDS_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
-    "adapter", "hooks", "keywords.json"
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    "conf", "keywords.json"
 )
 
 

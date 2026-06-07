@@ -185,13 +185,15 @@ class TestUninstall:
 class TestRenderAllTemplates:
     def test_renders_hooks_and_sidecars(self, tmp_path):
         # Create template files
-        (tmp_path / "hooks.template.json").write_text('{"root": "{PLUGIN_ROOT}"}')
+        conf_templates = tmp_path / "conf" / "templates"
+        conf_templates.mkdir(parents=True)
+        (conf_templates / "hooks.template.json").write_text('{"root": "{PLUGIN_ROOT}"}')
         sidecar_dir = tmp_path / "sidecars" / "memory-compactor"
         sidecar_dir.mkdir(parents=True)
-        (sidecar_dir / "sidecar.template.json").write_text('{"root": "{PLUGIN_ROOT}"}')
+        (conf_templates / "sidecar.template.json").write_text('{"root": "{PLUGIN_ROOT}"}')
         skills_dir = tmp_path / "skills" / "remora-architecture"
         skills_dir.mkdir(parents=True)
-        (skills_dir / "SKILL.template.md").write_text('{PLUGIN_ROOT}')
+        (conf_templates / "SKILL.template.md").write_text('{PLUGIN_ROOT}')
         agents_dir = tmp_path / "agents"
         agents_dir.mkdir()
         (agents_dir / "test.template.json").write_text('{PYTHON}')
@@ -208,7 +210,9 @@ class TestRenderAllTemplates:
             assert str(tmp_path) in f.read()
 
     def test_dry_run_skips_render(self, tmp_path):
-        (tmp_path / "hooks.template.json").write_text('{}')
+        conf_templates = tmp_path / "conf" / "templates"
+        conf_templates.mkdir(parents=True)
+        (conf_templates / "hooks.template.json").write_text('{}')
 
         install.DRY_RUN = True
         install.render_all_templates(str(tmp_path))
