@@ -125,62 +125,8 @@ def _handle_pre_tool_use(context, conv_id, current_turn_idx):
         return {"injectSteps": []}
         
     topic_id, decisions = _get_active_topic_and_decisions(uuid)
-    
-    hit_decisions = []
-    for d in decisions:
-        for f in d["files"]:
-            # 改用包含/后缀匹配，防范同名跨目录文件误命中
-            if f and (f in target_file or target_file.endswith(f)):
-                hit_decisions.append(d)
-                break
-                
-    if hit_decisions:
-        state_key = "protect_file:" + target_file
-        retry_status = dao.get_hook_state(conv_id, current_turn_idx, state_key)
-        if retry_status == "1":
-            # 第二次尝试，直接放行 (allow)
-            return {"decision": "allow", "injectSteps": []}
-        else:
-            # 第一次尝试，记录状态为 "1"，并返回 deny 与 prompt 注入
-            dao.set_hook_state(conv_id, current_turn_idx, state_key, "1")
-            decision_text = _truncate_decisions(hit_decisions)
-            # 中文翻译：
-            # ⛔ REMORA 安全限制 [实体防护]：禁止未经授权的自我修改！
-            # ============================================================
-            # !!! 关键策略违规 & 记忆防御触发 !!!
-            # 你尝试修改或破坏性覆写受物理保护的系统配置或决策实体（目标：{target_file}）。
-            #
-            # 必须遵守的决策：
-            # - {decision_text}
-            #
-            # 严禁未经授权更改核心代理行为规则或决策锚点，以防状态漂移！
-            #
-            # 如需继续，你必须：
-            # 1. 解释意图：与用户讨论并确认修改此受保护配置的原因。
-            # 2. 手动确认：在提出进一步编辑之前，确保用户在对话中显式允许该更改。
-            # ============================================================
-            prompt = (
-                f"<system-reminder>\n"
-                f"⛔ REMORA SAFETY LIMIT [ENTITY-PROTECTION]: UNSANCTIONED SELF-MODIFICATION BLOCKED!\n"
-                f"============================================================\n"
-                f"!!! CRITICAL POLICY VIOLATION & MEMORY DEFENSE TRIGGERED !!!\n"
-                f"YOU ATTEMPTED TO MODIFY OR DESTRUCTIVELY OVERWRITE PHYSICALLY PROTECTED SYSTEM CONFIGURATIONS OR DECISION ENTITIES (Target: {target_file}).\n\n"
-                f"THE DECISIONS YOU MUST COMPLY WITH:\n"
-                f"- {decision_text}\n\n"
-                f"UNAUTHORIZED ALTERATION OF CORE AGENT BEHAVIOR RULES OR DECISION ANCHORS IS STRICTLY PROHIBITED TO PREVENT STATE DRIFT!\n\n"
-                f"TO PROCEED, YOU MUST:\n"
-                f"1. EXPLAIN INTENT: DISCUSS WITH THE USER AND CONFIRM THE REASON FOR MODIFYING THIS PROTECTED CONFIGURATION.\n"
-                f"2. MANUAL CONFIRM: ENSURE THE USER EXPLICITLY PERMITS THE CHANGE IN THE CONVERSATION BEFORE PROPOSING FURTHER EDITS.\n"
-                f"============================================================\n"
-                f"</system-reminder>"
-            )
-            return {
-                "decision": "deny",
-                "reason": f"⛔ REMORA SAFETY LIMIT [ENTITY-PROTECTION]: Unauthorized edit to {target_file} blocked. Explain intent and retry.",
-                "injectSteps": [{"ephemeralMessage": prompt}]
-            }
 
-    # 方案 2：全局核心代码“首写拦截 + 自适应二次放行”
+    # 方案 2：全局核心代码"首写拦截 + 自适应二次放行"
     # 检查目标文件是否是规划制品
     is_artifact = "/artifacts/" in target_file or target_file.endswith("task.md") or target_file.endswith("implementation_plan.md") or target_file.endswith("walkthrough.md")
     

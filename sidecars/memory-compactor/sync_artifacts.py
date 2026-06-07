@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import hashlib
 import sqlite3
 
@@ -64,13 +65,13 @@ def scan_and_ingest_artifacts(context):
             conn.execute(
                 """INSERT INTO messages (conversation_id, line_number, timestamp, role, content, topic_id)
                    VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?)""",
-                (sync_conv_id, 999900 + target_files.index(filename), filename, content, "artifact_topic"))
+                (sync_conv_id, 999900 + target_files.index(filename), filename, content, json.dumps(["artifact_topic"])))
             
             # 确保在 project_topics 表中也有此全局约束话题的记录
             conn.execute(
-                """INSERT OR REPLACE INTO project_topics (uuid, topic_id, status, summary, constraints)
-                   VALUES (?, ?, 'closed', ?, ?)""",
-                (project_uuid, "artifact_topic", f"Consolidated architecture decisions from {filename}", f"Artifact: {filename}"))
+                """INSERT OR REPLACE INTO project_topics (uuid, topic_id, status, summary)
+                   VALUES (?, ?, 'closed', ?)""",
+                (project_uuid, "artifact_topic", f"Consolidated architecture decisions from {filename}"))
                 
             # [P0] 极速无感写入事件队列，解决 Hook 挂接大模型延迟问题
             if filename == "implementation_plan.md":

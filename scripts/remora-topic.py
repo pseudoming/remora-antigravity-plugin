@@ -1,6 +1,6 @@
-from lib.paths import get_data_dir
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from lib.paths import get_data_dir
 """
 Remora Topic Controller Script
 用于手动控制话题状态修改 (new/switch/close) 以及手动打标确认决策 (confirm)

@@ -160,19 +160,12 @@ def get_confirmed_decisions(project_uuid: str, topic_id: str) -> List[Dict]:
         with closing(_get_conn()) as conn:
             with conn:
                 rows = conn.execute(
-                    "SELECT decision, rationale, evidence_msg_ids, associated_files FROM topic_decisions WHERE project_uuid=? AND topic_id=? AND user_confirmed=1 ORDER BY created_at ASC", 
+                    "SELECT decision, rationale, evidence_msg_ids, decision_type FROM topic_decisions WHERE project_uuid=? AND topic_id=? AND user_confirmed=1 ORDER BY created_at ASC", 
                     (project_uuid, topic_id)
                 ).fetchall()
                 
                 decisions = []
-                for d_text, rationale, evidence_msg_ids_json, files_json in rows:
-                    files = []
-                    if files_json:
-                        try:
-                            files = [item.get('file', '') for item in json.loads(files_json) if 'file' in item]
-                        except Exception as e:
-                            logging.error(f"Error parsing decision JSON files: {e}")
-                    
+                for d_text, rationale, evidence_msg_ids_json, decision_type in rows:
                     evidence_texts = []
                     if evidence_msg_ids_json:
                         try:
@@ -186,8 +179,8 @@ def get_confirmed_decisions(project_uuid: str, topic_id: str) -> List[Dict]:
                             
                     decisions.append({
                         "text": f"{d_text} (原因: {rationale})",
-                        "files": files,
-                        "evidence": "\n".join(evidence_texts)
+                        "evidence": "\n".join(evidence_texts),
+                        "decision_type": decision_type or "approved"
                     })
                 return decisions
     except Exception as e:
@@ -198,7 +191,7 @@ def confirm_decision(project_uuid: str, decision_id: int) -> bool:
     with closing(_get_conn()) as conn:
         with conn:
             cursor = conn.execute(
-                "UPDATE topic_decisions SET user_confirmed=1 WHERE id=? AND project_uuid=?",
+                "UPDATE topic_decisions SET user_confirmed=1, updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_uuid=?",
                 (decision_id, project_uuid)
             )
             return cursor.rowcount > 0
@@ -260,9 +253,10 @@ def recall_decisions_by_fts5_topic(project_uuid: str, conv_id: str, keyword: str
                     FROM topic_decisions
                     WHERE (project_uuid = ? OR conversation_id = ?)
                     AND topic_id IN (
-                        SELECT DISTINCT m.topic_id
+                        SELECT DISTINCT j.value
                         FROM messages m
                         JOIN messages_fts fts ON m.id = fts.rowid
+                        JOIN json_each(COALESCE(m.topic_id, '[]')) j
                         WHERE m.conversation_id IN (
                             SELECT conversation_id FROM watermarks WHERE project_uuid = ?
                             UNION
@@ -335,10 +329,11 @@ def touch_topics_accessed_by_recall(project_uuid: str, conv_id: str, keyword: st
                 UPDATE project_topics SET last_accessed_at = CURRENT_TIMESTAMP
                 WHERE uuid = ? 
                 AND topic_id IN (
-                    SELECT topic_id FROM (
-                        SELECT DISTINCT m.topic_id, m.id
+                    SELECT value FROM (
+                        SELECT DISTINCT j.value, m.id
                         FROM messages m
                         JOIN messages_fts fts ON m.id = fts.rowid
+                        JOIN json_each(COALESCE(m.topic_id, '[]')) j
                         WHERE m.conversation_id IN (
                             SELECT conversation_id FROM watermarks WHERE project_uuid = ?
                             UNION

@@ -1,6 +1,6 @@
-from lib.paths import get_data_dir
 #!/usr/bin/env python3
 import sys, os
+from lib.paths import get_data_dir
 sys.path.insert(0, os.path.dirname(__file__))
 from lib.context import hook_entrypoint
 from lib.session import read_mode
@@ -8,6 +8,7 @@ from lib.stats import accumulate
 
 # 引入抽离出的核心算法模块
 from safety_rules import inspect_command
+from lib.subagent import get_subagent_type
 
 import json
 import re
@@ -48,55 +49,6 @@ def make_deny_reason(prefix, message, action_tip=""):
         reason += f"\nACTION REQUIRED: {action_tip}"
     return reason
 
-def get_subagent_type(transcript_path):
-    """通过系统官方 agentapi 查询当前子代理的 typeName，实现物理只读/读写属性提取"""
-    if not transcript_path:
-        return None
-    match = re.search(r'/brain/([^/]+)/', transcript_path)
-    if not match:
-        return None
-    conv_id = match.group(1)
-    
-    try:
-        # 物理注入缓存的 LS 凭据，防止 Sandbox Hook 执行时由于缺少环境变量导致鉴权失败返回 1
-        env = dict(os.environ)
-        if os.path.exists(os.path.join(get_data_dir(), ".runtime", "remora_agent_env.json")):
-            try:
-                with open(os.path.join(get_data_dir(), ".runtime", "remora_agent_env.json"), "r", encoding="utf-8") as ef:
-                    cached_env = json.load(ef)
-                    env.update(cached_env)
-            except:
-                pass
-                
-        # 使用官方 agentapi get-conversation-metadata 获取会话元数据
-        cmd = ["/home/agent/.gemini/antigravity/bin/agentapi", "get-conversation-metadata", conv_id]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
-        if res.returncode == 0:
-            data = json.loads(res.stdout)
-            metadata = data.get("response", {}).get("conversationMetadata", {}).get("metadata", {})
-            parent_id = metadata.get("parentConversationId")
-            if not parent_id:
-                return None
-            return metadata.get("subagentSpec", {}).get("typeName")
-        else:
-            with open(os.path.join(get_data_dir(), ".runtime", "remora_hook_debug.txt"), "a", encoding="utf-8") as df:
-                df.write(f"[remora] agentapi returncode={res.returncode}, stderr={res.stderr}\n")
-    except Exception as e:
-        with open(os.path.join(get_data_dir(), ".runtime", "remora_hook_debug.txt"), "a", encoding="utf-8") as df:
-            df.write(f"[remora] agentapi exception: {str(e)}\n")
-
-    # ==========================================
-    # 兜底死锁防护：如果进程查询失败/超时，但可确定该日志属于子会话，则特许升级为 is_sub = True
-    # ==========================================
-    try:
-        if os.path.exists(os.path.join(get_data_dir(), ".runtime", "remora_main_conv_id.txt")):
-            with open(os.path.join(get_data_dir(), ".runtime", "remora_main_conv_id.txt"), "r") as f:
-                main_id = f.read().strip()
-                if main_id and conv_id != main_id:
-                    return "Remora_Subagent_Fallback"
-    except:
-        pass
-    return None
 
 @hook_entrypoint(fallback_result={"decision": "allow"})
 def main(context):

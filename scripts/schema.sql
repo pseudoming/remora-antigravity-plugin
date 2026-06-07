@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS project_topics (
     topic_id TEXT NOT NULL,     -- 话题的唯一标识符（如 t_001）
     status TEXT DEFAULT 'open', -- 话题状态：open（活跃）或 closed（已归档）
     summary TEXT,               -- 话题的结构化摘要内容
-    constraints TEXT,           -- 该话题下仍在生效的技术约束或规则
     compression_confidence REAL DEFAULT 1.0, -- [P2] 压缩置信度校验值 (校验存留决策比例)
     source TEXT DEFAULT 'auto', -- 话题来源：'auto' (自动提取) 或 'manual' (用户手动创建/打标晋升)
     last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 上次被 switch 切换或 recall 检索命中的时间戳
@@ -27,7 +26,6 @@ CREATE TABLE IF NOT EXISTS topic_decisions (
     evidence_msg_ids TEXT,                -- JSON 数组格式的自增消息 ID 记录（用于温存储防篡改溯源）
     user_confirmed INTEGER DEFAULT 0,     -- 用户是否已物理确认（1 为确认，100% 压缩强保留）
     decision_type TEXT DEFAULT 'approved',-- 决策类型（核准等）
-    associated_files TEXT DEFAULT '[]',   -- JSON字符串，物理修改关联的文件列表
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 创建时间
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 最后更新时间
     FOREIGN KEY(project_uuid, topic_id) REFERENCES project_topics(uuid, topic_id)

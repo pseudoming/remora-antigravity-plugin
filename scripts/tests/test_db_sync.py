@@ -58,10 +58,11 @@ def setup_db(monkeypatch):
                     conversation_id TEXT,
                     decision TEXT,
                     rationale TEXT,
-                    associated_files TEXT,
                     evidence_msg_ids TEXT,
                     user_confirmed INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    decision_type TEXT DEFAULT 'approved',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE TABLE messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -297,11 +297,12 @@ You MUST output ONLY a valid JSON object matching this schema:
       "topic_id": "t_001",
       "summary": "...",
       "decisions": [
-        {{"decision": "...", "rationale": "...", "evidence_msg_ids": [123, 125], "user_confirmed": false, "inherited_from": []}}
+        {{"decision": "...", "rationale": "...", "evidence_msg_ids": [123, 125], "decision_type": "approved", "user_confirmed": false, "inherited_from": []}}
       ]
     }}
   ]
 }}
+Note: decision_type MUST be one of: "approved" (decision accepted/made), "rejected" (proposal explicitly rejected), "deferred" (postponed for later).
 Note: If this call compresses or merges old decisions with known IDs (e.g. 12, 15), you MUST list those original IDs in the "inherited_from" array. Otherwise, set "inherited_from": [].{topic_constraint_prompt}
 Note: evidence_msg_ids MUST NOT be empty. Fill it with the actual IDs from [msg_XXXX] prefixes.
 Note: If the MODEL output shows clear self-correction, agreement, or adoption of user's proposal, set "user_confirmed": true.
@@ -345,18 +346,34 @@ If no significant topics, output: {{"topics": []}}
                     for d in t.get("decisions", []):
                         user_confirmed_val = 1 if d.get("user_confirmed", False) else 0
                         
-                        # LLM natively returns messages.id in 'evidence_msg_ids'
                         evidence_msg_ids = d.get('evidence_msg_ids', [])
 
+                        decision_type = d.get('decision_type', 'approved')
                         conn.execute(
                             """INSERT INTO topic_decisions
-                               (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, user_confirmed)
-                               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                               (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, user_confirmed, decision_type)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                             (session['project_uuid'], t.get('topic_id', ''),
                              session['conversation_id'], d.get('decision', ''),
                              d.get('rationale', ''),
                              json.dumps(evidence_msg_ids),
-                             user_confirmed_val))
+                             user_confirmed_val,
+                             decision_type))
+
+                    # Backfill messages.topic_id with JSON array (multi-topic support)
+                    topic_evidence_ids = set()
+                    for d in t.get("decisions", []):
+                        for mid in d.get('evidence_msg_ids', []):
+                            topic_evidence_ids.add(int(mid))
+                    for mid in topic_evidence_ids:
+                        conn.execute(
+                            """UPDATE messages SET topic_id =
+                               CASE
+                                   WHEN topic_id IS NULL THEN json_array(?)
+                                   ELSE json_insert(topic_id, '$[#]', ?)
+                               END
+                               WHERE id = ?""",
+                            (t.get('topic_id', ''), t.get('topic_id', ''), mid))
             except json.JSONDecodeError:
                 pass
 

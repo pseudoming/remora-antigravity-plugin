@@ -20,4 +20,5 @@ agents/*.json
 hooks.json.bak
 hooks.template.json.bak
 ORIGINAL_REQUEST.md
+.coverage
 

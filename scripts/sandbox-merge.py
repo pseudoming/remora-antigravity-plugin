@@ -3,10 +3,19 @@ import sys, os, subprocess, glob
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: sandbox-merge.py <subagent_conv_id>")
+        print("Usage: sandbox-merge.py <subagent_conv_id> --target-cwd <dir>")
         sys.exit(1)
         
     subagent_id = sys.argv[1]
+
+    target_cwd = None
+    for i, arg in enumerate(sys.argv):
+        if arg == "--target-cwd" and i + 1 < len(sys.argv):
+            target_cwd = sys.argv[i + 1]
+            break
+    if not target_cwd:
+        print("ERROR: --target-cwd is required.")
+        sys.exit(1)
     
     # 模拟 bash: ls -d ~/.gemini/antigravity/brain/*/.system_generated/worktrees/*$SUBAGENT_CONV_ID* | head -n 1
     pattern = os.path.expanduser(f"~/.gemini/antigravity/brain/*/.system_generated/worktrees/*{subagent_id}*")
@@ -28,8 +37,6 @@ def main():
             
         print(f"Merging branch {branch_name} from worktree {wt_dir} ...")
         
-        target_cwd = "/home/agent/wsl_code/remora"
-
         # 提取物理变更文件列表输出给调用者
         print("[Remora] Detecting physical changed files in sandbox...")
         try:
@@ -40,7 +47,7 @@ def main():
         except subprocess.CalledProcessError as e:
             print(f"Failed to detect physical changes: {e}")
         
-        # 2. 合并: cd /home/agent/wsl_code/remora && git merge "$BRANCH_NAME"
+        # 2. 合并: cd {target_cwd} && git merge "$BRANCH_NAME"
         subprocess.check_call(["git", "merge", branch_name, "-m", f"Merge sandbox changes from subagent {subagent_id}"], cwd=target_cwd)
         
         print("Sandbox merged successfully.")

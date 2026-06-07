@@ -5,54 +5,7 @@ from lib.context import hook_entrypoint
 from lib.stats import cleanup, get_stats
 
 import json, re, subprocess
-
-def get_subagent_type(transcript_path):
-    """通过系统官方 agentapi 查询当前子代理的 typeName，实现物理只读/读写属性提取"""
-    if not transcript_path:
-        return None
-    match = re.search(r'/brain/([^/]+)/', transcript_path)
-    if not match:
-        return None
-    conv_id = match.group(1)
-    
-    from lib.paths import get_data_dir
-    try:
-        # 物理注入缓存的 LS 凭据，防止 Sandbox Hook 执行时由于缺少环境变量导致鉴权失败返回 1
-        env = dict(os.environ)
-        if os.path.exists(os.path.join(get_data_dir(), ".runtime", "remora_agent_env.json")):
-            try:
-                with open(os.path.join(get_data_dir(), ".runtime", "remora_agent_env.json"), "r", encoding="utf-8") as ef:
-                    cached_env = json.load(ef)
-                    env.update(cached_env)
-            except:
-                pass
-                
-        # 使用官方 agentapi get-conversation-metadata 获取会话元数据
-        cmd = ["/home/agent/.gemini/antigravity/bin/agentapi", "get-conversation-metadata", conv_id]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
-        if res.returncode == 0:
-            data = json.loads(res.stdout)
-            metadata = data.get("response", {}).get("conversationMetadata", {}).get("metadata", {})
-            parent_id = metadata.get("parentConversationId")
-            if not parent_id:
-                return None
-            return metadata.get("subagentSpec", {}).get("typeName")
-    except Exception:
-        pass
-
-    # ==========================================
-    # 兜底死锁防护：如果进程查询失败/超时，但可确定该日志属于子会话，则特许升级为 is_sub = True
-    # ==========================================
-    try:
-        main_id_file = os.path.join(get_data_dir(), ".runtime", "remora_main_conv_id.txt")
-        if os.path.exists(main_id_file):
-            with open(main_id_file, "r") as f:
-                main_id = f.read().strip()
-                if main_id and conv_id != main_id:
-                    return "Remora_Subagent_Fallback"
-    except:
-        pass
-    return None
+from lib.subagent import get_subagent_type
 
 @hook_entrypoint(fallback_result={"injectSteps": [{"ephemeralMessage": "<system-reminder>⚠️ Remora Session Guardian 发生异常。状态同步防线已降级，但不影响正常对话。</system-reminder>"}]})
 def main(context):

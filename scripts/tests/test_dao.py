@@ -52,10 +52,11 @@ def setup_db(monkeypatch):
                     conversation_id TEXT,
                     decision TEXT,
                     rationale TEXT,
-                    associated_files TEXT,
                     evidence_msg_ids TEXT,
                     user_confirmed INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    decision_type TEXT DEFAULT 'approved',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE TABLE messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,18 +144,17 @@ def test_decision_operations():
                 INSERT INTO messages (id, conversation_id, content) VALUES (1, 'c1', 'Evidence for python');
                 INSERT INTO messages (id, conversation_id, content) VALUES (2, 'c1', 'Evidence for rust');
 
-                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, associated_files, evidence_msg_ids)
-                VALUES ('proj_1', 'topic_A', 'Use python', 'It is fast to write', 1, '[{"file": "main.py"}]', '[1]');
+                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, evidence_msg_ids)
+                VALUES ('proj_1', 'topic_A', 'Use python', 'It is fast to write', 1, '[1]');
             
-                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, associated_files, evidence_msg_ids)
-                VALUES ('proj_1', 'topic_A', 'Use rust', 'It is memory safe', 0, '[{"file": "main.rs"}]', '[2]');
+                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, evidence_msg_ids)
+                VALUES ('proj_1', 'topic_A', 'Use rust', 'It is memory safe', 0, '[2]');
             """)
         
     decisions = dao.get_confirmed_decisions("proj_1", "topic_A")
     assert len(decisions) == 1
     assert decisions[0]["text"] == "Use python (原因: It is fast to write)"
-    assert decisions[0]["files"] == ["main.py"]
-    # Evidence fetched natively through message.id
+    assert decisions[0]["decision_type"] == "approved"
     assert decisions[0]["evidence"] == "Evidence for python"
 
 def test_fts5_recall_operations():
@@ -165,7 +165,7 @@ def test_fts5_recall_operations():
             conn.executescript("""
                 INSERT INTO watermarks (conversation_id, project_uuid) VALUES ('conv_1', 'proj_1');
             
-                INSERT INTO messages (id, conversation_id, topic_id, role, content) VALUES (1, 'conv_1', 'topic_A', 'user', 'hello world 202606606');
+                INSERT INTO messages (id, conversation_id, topic_id, role, content) VALUES (1, 'conv_1', '["topic_A"]', 'user', 'hello world 202606606');
                 INSERT INTO messages_fts (rowid, content) VALUES (1, 'hello world 202606606');
             
                 INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale, evidence_msg_ids) 
@@ -377,18 +377,14 @@ def test_get_confirmed_decisions_edge_cases():
             conn.executescript("""
                 INSERT INTO messages (id, conversation_id, content) VALUES (10, 'c1', 'Exists');
                 INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed) VALUES ('proj_1', 'topic_A', 'No files/evidence', 'none', 1);
-                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, associated_files) VALUES ('proj_1', 'topic_A', 'Bad files', 'Broken JSON', 1, 'not-json');
                 INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, evidence_msg_ids) VALUES ('proj_1', 'topic_A', 'Bad evidence', 'Wrong format', 1, 'bad-json');
-                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, evidence_msg_ids, associated_files) VALUES ('proj_1', 'topic_A', 'Missing msg', 'No such msg', 1, '[999]', '[{"file": "test.py"}]');
+                INSERT INTO topic_decisions (project_uuid, topic_id, decision, rationale, user_confirmed, evidence_msg_ids) VALUES ('proj_1', 'topic_A', 'Missing msg', 'No such msg', 1, '[999]');
             """)
     decisions = dao.get_confirmed_decisions("proj_1", "topic_A")
-    assert len(decisions) == 4
-    assert decisions[0]["files"] == []
+    assert len(decisions) == 3
     assert decisions[0]["evidence"] == ""
-    assert decisions[1]["files"] == []
+    assert decisions[1]["evidence"] == ""
     assert decisions[2]["evidence"] == ""
-    assert decisions[3]["files"] == ["test.py"]
-    assert decisions[3]["evidence"] == ""
 
 
 def test_recall_decisions_edge_cases():
@@ -397,7 +393,7 @@ def test_recall_decisions_edge_cases():
         with conn:
             conn.executescript("""
                 INSERT INTO watermarks (conversation_id, project_uuid) VALUES ('conv_1', 'proj_1');
-                INSERT INTO messages (id, conversation_id, topic_id, role, content) VALUES (1, 'conv_1', 'topic_A', 'user', 'hello world');
+                INSERT INTO messages (id, conversation_id, topic_id, role, content) VALUES (1, 'conv_1', '["topic_A"]', 'user', 'hello world');
                 INSERT INTO messages_fts (rowid, content) VALUES (1, 'hello world');
                 INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale) VALUES ('proj_1', 'conv_1', 'topic_A', 'Test decision', 'Test reason');
                 INSERT INTO topic_decisions (project_uuid, conversation_id, topic_id, decision, rationale, evidence_msg_ids) VALUES ('proj_1', 'conv_1', 'topic_A', 'Bad evidence', 'Broken', 'not json');

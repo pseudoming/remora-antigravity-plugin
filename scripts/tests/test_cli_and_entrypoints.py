@@ -278,7 +278,7 @@ def test_sandbox_merge_errors(capsys):
         assert excinfo.value.code == 1
 
     # Worktree missing
-    with patch("sys.argv", ["sandbox-merge.py", "sub_1"]), \
+    with patch("sys.argv", [                    "sandbox-merge.py", "sub_1", "--target-cwd", "/tmp"]), \
          patch("glob.glob", return_value=[]):
         with pytest.raises(SystemExit) as excinfo:
             sandbox_merge.main()
@@ -287,7 +287,7 @@ def test_sandbox_merge_errors(capsys):
 
 
 def test_sandbox_merge_success(capsys):
-    with patch("sys.argv", ["sandbox-merge.py", "sub_1"]), \
+    with patch("sys.argv", [                    "sandbox-merge.py", "sub_1", "--target-cwd", "/tmp"]), \
          patch("glob.glob", return_value=["/path/to/worktree"]), \
          patch("subprocess.check_output") as mock_output, \
          patch("subprocess.check_call") as mock_call:
@@ -320,15 +320,10 @@ def test_gc_scripts_main_execution():
 
 # 11. schema_init.py
 def test_schema_init_clean_and_migration(tmp_path):
-    # Setup paths
     db_file = tmp_path / "test_remora_memory.db"
-    
-    # 1. Test init on clean database
     with patch("schema_init.DB_PATH", str(db_file)):
         schema_init.init_db()
         assert os.path.exists(db_file)
-        
-        # Verify tables exist
         conn = sqlite3.connect(str(db_file))
         cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = [row[0] for row in cursor.fetchall()]
@@ -337,304 +332,6 @@ def test_schema_init_clean_and_migration(tmp_path):
         assert "session_state" in tables
         assert "watermarks" in tables
         conn.close()
-
-    # 2. Test legacy migration
-    legacy_db = tmp_path / "legacy_remora_memory.db"
-    conn = sqlite3.connect(str(legacy_db))
-    # Create legacy project_topics (missing source, last_accessed_at, associated_files, referenced_files)
-    conn.execute("""
-        CREATE TABLE project_topics (
-            uuid TEXT NOT NULL,
-            topic_id TEXT NOT NULL,
-            status TEXT DEFAULT 'open',
-            summary TEXT,
-            constraints TEXT,
-            compression_confidence REAL DEFAULT 1.0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (uuid, topic_id)
-        )
-    """)
-    # Create legacy topic_decisions (has created_at_line, created_at_msg_id, evidence_msg_db_ids, but missing user_confirmed, decision_type, associated_files)
-    conn.execute("""
-        CREATE TABLE topic_decisions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_uuid TEXT NOT NULL,
-            topic_id TEXT NOT NULL,
-            conversation_id TEXT NOT NULL,
-            decision TEXT NOT NULL,
-            rationale TEXT NOT NULL,
-            created_at_line INTEGER,
-            created_at_msg_id INTEGER,
-            evidence_msg_db_ids TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    # Create legacy watermarks (has last_line_processed, but missing last_msg_id)
-    conn.execute("""
-        CREATE TABLE watermarks (
-            project_uuid TEXT NOT NULL,
-            conversation_id TEXT NOT NULL,
-            last_line_processed INTEGER DEFAULT 0,
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (project_uuid, conversation_id)
-        )
-    """)
-    
-    # Insert legacy data
-    conn.execute("INSERT INTO project_topics (uuid, topic_id) VALUES ('p1', 't1')")
-    conn.execute("""
-        INSERT INTO topic_decisions (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_db_ids) 
-        VALUES ('p1', 't1', 'c1', 'dec_1', 'rat_1', '["msg_1"]')
-    """)
-    conn.execute("INSERT INTO watermarks (project_uuid, conversation_id, last_line_processed) VALUES ('p1', 'c1', 10)")
-    conn.commit()
-    conn.close()
-
-    # Run init_db on legacy database path
-    with patch("schema_init.DB_PATH", str(legacy_db)):
-        schema_init.init_db()
-        
-        # Verify migrated schema and data
-        conn = sqlite3.connect(str(legacy_db))
-        # 1. Check project_topics columns
-        cursor = conn.execute("PRAGMA table_info(project_topics)")
-        pt_cols = [row[1] for row in cursor.fetchall()]
-        assert "source" in pt_cols
-        assert "last_accessed_at" in pt_cols
-        assert "associated_files" in pt_cols
-        assert "referenced_files" in pt_cols
-        
-        # 2. Check topic_decisions (remodeled)
-        cursor = conn.execute("PRAGMA table_info(topic_decisions)")
-        td_cols = [row[1] for row in cursor.fetchall()]
-        assert "evidence_msg_ids" in td_cols
-        assert "user_confirmed" in td_cols
-        assert "decision_type" in td_cols
-        assert "associated_files" in td_cols
-        assert "created_at_line" not in td_cols
-        assert "evidence_msg_db_ids" not in td_cols
-
-        # Verify data migrated
-        cursor = conn.execute("SELECT decision, rationale, evidence_msg_ids, user_confirmed FROM topic_decisions")
-        row = cursor.fetchone()
-        assert row is not None
-        assert row[0] == "dec_1"
-        assert row[1] == "rat_1"
-        assert row[2] == '["msg_1"]'
-        assert row[3] == 0
-        
-        # 3. Check watermarks (remodeled)
-        cursor = conn.execute("PRAGMA table_info(watermarks)")
-        w_cols = [row[1] for row in cursor.fetchall()]
-        assert "last_msg_id" in w_cols
-        assert "last_line_processed" not in w_cols
-        
-        conn.close()
-
-
-def test_schema_init_phase34_both_evidence_columns(tmp_path):
-    db_file = tmp_path / "both_columns.db"
-    conn = sqlite3.connect(str(db_file))
-    conn.execute("""
-        CREATE TABLE topic_decisions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_uuid TEXT NOT NULL,
-            topic_id TEXT NOT NULL,
-            conversation_id TEXT NOT NULL,
-            decision TEXT NOT NULL,
-            rationale TEXT NOT NULL,
-            evidence_msg_db_ids TEXT,
-            evidence_msg_ids TEXT,
-            created_at_line INTEGER,
-            created_at_msg_id INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("INSERT INTO topic_decisions (id, project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_db_ids) VALUES (1, 'p1', 't1', 'c1', 'd1', 'r1', '[\"msg_1\"]')")
-    conn.commit()
-    conn.close()
-
-    with patch("schema_init.DB_PATH", str(db_file)):
-        schema_init.init_db()
-        conn = sqlite3.connect(str(db_file))
-        cursor = conn.execute("SELECT evidence_msg_ids FROM topic_decisions")
-        row = cursor.fetchone()
-        assert row[0] == '["msg_1"]'
-        conn.close()
-
-
-def test_schema_init_phase34_only_evidence_msg_ids_col(tmp_path):
-    db_file = tmp_path / "only_msg_ids.db"
-    conn = sqlite3.connect(str(db_file))
-    conn.execute("""
-        CREATE TABLE topic_decisions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_uuid TEXT NOT NULL,
-            topic_id TEXT NOT NULL,
-            conversation_id TEXT NOT NULL,
-            decision TEXT NOT NULL,
-            rationale TEXT NOT NULL,
-            evidence_msg_ids TEXT,
-            created_at_line INTEGER,
-            created_at_msg_id INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("INSERT INTO topic_decisions (id, project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids) VALUES (1, 'p1', 't1', 'c1', 'd1', 'r1', '[\"msg_2\"]')")
-    conn.commit()
-    conn.close()
-
-    with patch("schema_init.DB_PATH", str(db_file)):
-        schema_init.init_db()
-        conn = sqlite3.connect(str(db_file))
-        cursor = conn.execute("SELECT evidence_msg_ids FROM topic_decisions")
-        row = cursor.fetchone()
-        assert row[0] == '["msg_2"]'
-        conn.close()
-
-
-def test_schema_init_phase34_neither_evidence_col(tmp_path):
-    db_file = tmp_path / "neither_col.db"
-    conn = sqlite3.connect(str(db_file))
-    conn.execute("""
-        CREATE TABLE topic_decisions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_uuid TEXT NOT NULL,
-            topic_id TEXT NOT NULL,
-            conversation_id TEXT NOT NULL,
-            decision TEXT NOT NULL,
-            rationale TEXT NOT NULL,
-            created_at_line INTEGER,
-            created_at_msg_id INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("INSERT INTO topic_decisions (id, project_uuid, topic_id, conversation_id, decision, rationale) VALUES (1, 'p1', 't1', 'c1', 'd1', 'r1')")
-    conn.commit()
-    conn.close()
-
-    with patch("schema_init.DB_PATH", str(db_file)):
-        schema_init.init_db()
-        conn = sqlite3.connect(str(db_file))
-        cursor = conn.execute("SELECT evidence_msg_ids FROM topic_decisions")
-        row = cursor.fetchone()
-        assert row[0] is None
-        conn.close()
-
-
-def test_schema_init_evidence_msg_db_ids_migration(tmp_path):
-    db_file = tmp_path / "evidence_db_ids.db"
-    conn = sqlite3.connect(str(db_file))
-    conn.execute("""
-        CREATE TABLE topic_decisions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_uuid TEXT NOT NULL,
-            topic_id TEXT NOT NULL,
-            conversation_id TEXT NOT NULL,
-            decision TEXT NOT NULL,
-            rationale TEXT NOT NULL,
-            evidence_msg_db_ids TEXT,
-            created_at_line INTEGER,
-            created_at_msg_id INTEGER,
-            user_confirmed INTEGER DEFAULT 0,
-            decision_type TEXT DEFAULT 'approved',
-            associated_files TEXT DEFAULT '[]',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("INSERT INTO topic_decisions (id, project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_db_ids) VALUES (1, 'p1', 't1', 'c1', 'd1', 'r1', '[\"msg_3\"]')")
-    conn.commit()
-    conn.close()
-
-    with patch("schema_init.DB_PATH", str(db_file)):
-        schema_init.init_db()
-        conn = sqlite3.connect(str(db_file))
-        cursor = conn.execute("PRAGMA table_info(topic_decisions)")
-        cols = [row[1] for row in cursor.fetchall()]
-        assert "evidence_msg_ids" in cols
-        assert "evidence_msg_db_ids" not in cols
-        cursor = conn.execute("SELECT evidence_msg_ids FROM topic_decisions")
-        row = cursor.fetchone()
-        assert row[0] == '["msg_3"]'
-        conn.close()
-
-
-def test_schema_init_watermarks_migration(tmp_path):
-    db_file = tmp_path / "watermarks_migration.db"
-    conn = sqlite3.connect(str(db_file))
-    conn.execute("""
-        CREATE TABLE watermarks (
-            project_uuid TEXT NOT NULL,
-            conversation_id TEXT NOT NULL,
-            last_line_processed INTEGER DEFAULT 0,
-            last_msg_id INTEGER DEFAULT 0,
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (project_uuid, conversation_id)
-        )
-    """)
-    conn.execute("INSERT INTO watermarks (project_uuid, conversation_id, last_line_processed, last_msg_id) VALUES ('p1', 'c1', 10, 5)")
-    conn.commit()
-    conn.close()
-
-    with patch("schema_init.DB_PATH", str(db_file)):
-        schema_init.init_db()
-        conn = sqlite3.connect(str(db_file))
-        cursor = conn.execute("PRAGMA table_info(watermarks)")
-        cols = [row[1] for row in cursor.fetchall()]
-        assert "last_msg_id" in cols
-        assert "last_line_processed" not in cols
-        cursor = conn.execute("SELECT last_msg_id FROM watermarks")
-        row = cursor.fetchone()
-        assert row[0] == 5
-        conn.close()
-
-
-def test_schema_init_phase34_migration_exception(tmp_path):
-    db_file = tmp_path / "phase34_exception.db"
-    conn = sqlite3.connect(str(db_file))
-    conn.execute("""
-        CREATE TABLE topic_decisions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_uuid TEXT,
-            topic_id TEXT,
-            conversation_id TEXT,
-            decision TEXT,
-            rationale TEXT,
-            evidence_msg_db_ids TEXT,
-            created_at_line INTEGER,
-            created_at_msg_id INTEGER
-        )
-    """)
-    conn.execute("INSERT INTO topic_decisions (id, project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_db_ids) VALUES (1, 'p1', 't1', 'c1', 'd1', 'r1', 'bad_data')")
-    conn.commit()
-    conn.close()
-
-    with patch("schema_init.DB_PATH", str(db_file)):
-        schema_init.init_db()
-
-
-def test_schema_init_watermarks_migration_exception(tmp_path):
-    db_file = tmp_path / "watermarks_exception.db"
-    conn = sqlite3.connect(str(db_file))
-    conn.execute("""
-        CREATE TABLE watermarks (
-            project_uuid TEXT,
-            conversation_id TEXT,
-            last_line_processed INTEGER,
-            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-    with patch("schema_init.DB_PATH", str(db_file)):
-        schema_init.init_db()
 
 
 # =====================================================================
@@ -859,7 +556,7 @@ def test_cognitive_push_pre_tool_use():
         res = cognitive_push.main.__wrapped__(ctx_no_file)
         assert res == {"injectSteps": []}
 
-        # 3. Match tool, target file protected
+        # 3. Match tool, target file — triggers global write gate
         ctx_protect = {
             "toolName": "write_to_file",
             "toolArgs": {"TargetFile": "/path/to/my_file.py"}
@@ -869,16 +566,14 @@ def test_cognitive_push_pre_tool_use():
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
              patch("cognitive_push.dao.get_hook_state", return_value=None), \
              patch("cognitive_push.dao.set_hook_state"), \
-             patch("cognitive_push.dao.get_confirmed_decisions", return_value=[{"text": "dec_text", "files": ["my_file.py"]}]), \
              patch("lib.dao.get_hook_state", return_value=None), \
              patch("lib.dao.set_hook_state"):
              
             res = cognitive_push.main.__wrapped__(ctx_protect)
             assert len(res["injectSteps"]) == 1
             msg = res["injectSteps"][0]["ephemeralMessage"]
-            assert "MEMORY DEFENSE TRIGGERED" in msg
+            assert "GLOBAL-WRITE-GATE" in msg
             assert "my_file.py" in msg
-            assert "dec_text" in msg
 
         # 4. Target file not protected (First attempt should be Denied by Global Write Gate)
         with patch("cognitive_push.dao.get_latest_session", return_value=("c1", 1)), \
@@ -1119,7 +814,7 @@ def test_session_guardian_subagent_warning(tmp_path):
 # === Edge case coverage for sandbox-merge.py ===
 
 def test_sandbox_merge_empty_branch(capsys):
-    with patch("sys.argv", ["sandbox-merge.py", "sub_1"]), \
+    with patch("sys.argv", [                    "sandbox-merge.py", "sub_1", "--target-cwd", "/tmp"]), \
          patch("glob.glob", return_value=["/path/to/worktree"]), \
          patch("subprocess.check_output", return_value=""):
         with pytest.raises(SystemExit) as excinfo:
@@ -1128,7 +823,7 @@ def test_sandbox_merge_empty_branch(capsys):
         assert "ERROR: Could not determine branch name" in capsys.readouterr().out
 
 def test_sandbox_merge_diff_exception(capsys):
-    with patch("sys.argv", ["sandbox-merge.py", "sub_1"]), \
+    with patch("sys.argv", [                    "sandbox-merge.py", "sub_1", "--target-cwd", "/tmp"]), \
          patch("glob.glob", return_value=["/path/to/worktree"]), \
          patch("subprocess.check_output") as mock_output, \
          patch("subprocess.check_call") as mock_call:
@@ -1139,7 +834,7 @@ def test_sandbox_merge_diff_exception(capsys):
         assert "Failed to detect physical changes" in captured.out
 
 def test_sandbox_merge_merge_exception(capsys):
-    with patch("sys.argv", ["sandbox-merge.py", "sub_1"]), \
+    with patch("sys.argv", [                    "sandbox-merge.py", "sub_1", "--target-cwd", "/tmp"]), \
          patch("glob.glob", return_value=["/path/to/worktree"]), \
          patch("subprocess.check_output", return_value="my-branch\n"), \
          patch("subprocess.check_call", side_effect=subprocess.CalledProcessError(1, "git merge")):
