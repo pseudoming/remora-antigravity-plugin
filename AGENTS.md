@@ -3,6 +3,23 @@
 ## LARGE FILE SAFETY
 When reading or parsing potentially large log files (`*.jsonl`, etc.) in this project, you **MUST NEVER** use `f.readlines()` or load the entire file into memory at once. You **MUST** prioritize native shell utilities (`tail`, `grep`, `awk`) or use buffered/streaming reads to ensure O(1) memory footprint and minimal I/O latency.
 
+## ARCHITECTURE INVARIANTS (FAILURE = BUILD FAILURE)
+
+### 1. Core/Adapter Boundary
+- `scripts/core/` modules **MUST NEVER** import from `scripts/adapter/`. Violations are caught by `test_architecture.py`.
+- `scripts/core/` contains pure business logic with zero Antigravity dependencies.
+- `scripts/adapter/` may import from `scripts/core/` — this direction is allowed and expected.
+
+### 2. DAO Access Gate
+- All database read/write operations go through `scripts/lib/dao.py` (the re-export facade).
+- Direct `sqlite3.connect(get_db_path())` calls outside of `core/storage/` modules are forbidden.
+
+### 3. Import Boundary Enforcement
+- `test_architecture.py` runs on every CI build. Any import that crosses the wrong boundary will fail the test instantly.
+- Before creating new files, verify which side of the boundary they belong on:
+  - Antigravity-dependent (conversation.db, agentapi, hook protocol) → `adapter/`
+  - Pure logic with no platform dependency → `core/`
+
 ## ARCHITECTURE & REFACTORING DISCIPLINE
 
 ### 1. Hook Schema Strictness
