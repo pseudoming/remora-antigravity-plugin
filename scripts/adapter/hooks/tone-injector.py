@@ -20,7 +20,7 @@ import json, re
 # 设计原理一：会话模式感知与条件化语气控制
 # ==========================================================
 # 1. 静态 Hook 动态路由：由于 hooks.json 的 PreInvocation 是静态 echo，无法读取上下文。
-#    本脚本作为替代处理器，通过读取 /tmp 本地临时缓存，获取由前置 intent-detector 写入的会话 mode。
+#    本脚本作为替代处理器，通过 SQLite session_state 表（由 session-guardian 写入）读取会话 mode。
 # 2. 差异化语气约束：
 #    - 在 strict 模式下：向模型注入极其严格的客观专业（strict tone）提示词，限制废话和情绪表达；
 #    - 在 relax 模式下：不进行 any 语气约束注入，保障大模型在起草设计与发散脑暴时的创造力。

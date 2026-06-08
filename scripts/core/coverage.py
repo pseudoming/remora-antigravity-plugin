@@ -1,5 +1,7 @@
 import json
 
+from core.storage.decisions import get_decision_confirmed, get_confirmed_decision_ids
+
 
 def calculate_factual_confidence(conn, baseline_files, baseline_actions, output_topics):
     if not baseline_files and not baseline_actions:
@@ -19,10 +21,7 @@ def calculate_factual_confidence(conn, baseline_files, baseline_actions, output_
         if action.startswith("confirm:"):
             dec_id = action.split(":")[1]
             try:
-                cursor = conn.execute("SELECT user_confirmed FROM topic_decisions WHERE id=?", (dec_id,))
-                row = cursor.fetchone()
-                if row and row[0] == 1:
-                    covered_actions += 1
+                covered_actions += 1 if get_decision_confirmed(conn, int(dec_id)) else 0
             except Exception:
                 pass
 
@@ -32,11 +31,7 @@ def calculate_factual_confidence(conn, baseline_files, baseline_actions, output_
 
 
 def validate_id_inheritance(conn, project_uuid, new_topics):
-    cursor = conn.execute(
-        "SELECT id FROM topic_decisions WHERE project_uuid = ? AND user_confirmed = 1",
-        (project_uuid,)
-    )
-    confirmed_ids = {row[0] for row in cursor.fetchall()}
+    confirmed_ids = get_confirmed_decision_ids(conn, project_uuid)
     if not confirmed_ids:
         return True
     inherited_ids = set()

@@ -27,14 +27,5 @@ def watermark_exists(project_uuid: str, conversation_id: str) -> bool:
         return False
 
 def get_active_topic_created_at(project_uuid: str) -> Optional[str]:
-    try:
-        with closing(get_conn()) as conn:
-            with conn:
-                row = conn.execute(
-                    "SELECT created_at FROM project_topics WHERE uuid=? AND status='open' LIMIT 1",
-                    (project_uuid,)
-                ).fetchone()
-                return row[0] if row else None
-    except Exception as e:
-        log_warn(f"get_active_topic_created_at: {e}")
-        return None
+    from core.storage.topics import get_active_topic_created_at as _impl
+    return _impl(project_uuid)

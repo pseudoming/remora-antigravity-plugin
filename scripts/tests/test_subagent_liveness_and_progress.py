@@ -553,7 +553,7 @@ def test_progress_invalid_timestamp(mock_env, monkeypatch, capsys):
     assert "no valid timestamp" in res["reason"]
 
 def test_heavy_task_threshold(mock_env, monkeypatch, capsys):
-    tmp_path, _ = mock_env
+    tmp_path, db_path = mock_env
     conv_id = "conv_heavy"
     progress_dir = Path(tmp_path) / ".gemini" / "antigravity" / "brain" / conv_id / "scratch"
     progress_dir.mkdir(parents=True, exist_ok=True)
@@ -563,6 +563,15 @@ def test_heavy_task_threshold(mock_env, monkeypatch, capsys):
             "last_updated_at": int(time.time() - 150),
             "details": "run_command: building project"
         }, f)
+    # judge_zombie detects heavy tools via latest_msg_role, not progress.details
+    conn = sqlite3.connect(db_path, timeout=15)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO messages (conversation_id, line_number, timestamp, role, content) VALUES (?, ?, ?, ?, ?)",
+        (conv_id, 1, time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time() - 150)), "run_command", "building project")
+    )
+    conn.commit()
+    conn.close()
     monkeypatch.setattr(sys, "argv", ["check-subagents-liveness.py", conv_id])
     with pytest.raises(SystemExit) as excinfo:
         liveness_checker.main()

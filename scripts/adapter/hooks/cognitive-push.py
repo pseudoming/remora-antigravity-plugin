@@ -9,14 +9,17 @@ from adapter.bridge.context import hook_entrypoint
 from adapter.bridge.paths import extract_conv_id
 from lib import dao
 from core.logger import warn, error, debug
-from core.injector import truncate_decisions
+
 
 def _get_active_topic_and_decisions(uuid):
     topic_id = dao.get_active_topic(uuid)
     if not topic_id:
         return None, []
-    
-    decisions = dao.get_confirmed_decisions(uuid, topic_id)
+    # Use get_recent_decisions for read-only within-hook access (single-shot conn)
+    from core.storage.connection import get_conn, closing
+    from core.storage.decisions import get_recent_decisions
+    with closing(get_conn()) as conn:
+        decisions = get_recent_decisions(conn, uuid, topic_id, limit=5)
     return topic_id, decisions
 
 def _handle_pre_invocation(context, conv_id, current_turn_idx):
@@ -44,16 +47,15 @@ def _handle_pre_invocation(context, conv_id, current_turn_idx):
         )
         inject_steps.append({"ephemeralMessage": ephemeral_msg})
 
-    # 查找最新的 session_id 判定冷启动
-    latest = dao.get_latest_session()
-    if not latest or latest[1] == 0:
+    # 查找 session 判定冷启动
+    session = dao.get_session(conv_id)
+    if not session or session[2] == 0:  # session[2] = is_cold_start
         dao.set_hook_state(conv_id, current_turn_idx, "resume_injected", "1")
         return {"injectSteps": inject_steps}
 
 
         
-    session_id = latest[0]
-    uuid = dao.get_project_uuid_by_conv(session_id)
+    uuid = dao.get_project_uuid_by_conv(conv_id)
     if not uuid:
         dao.set_hook_state(conv_id, current_turn_idx, "resume_injected", "1")
         return {"injectSteps": inject_steps}
@@ -61,36 +63,32 @@ def _handle_pre_invocation(context, conv_id, current_turn_idx):
     topic_id, decisions = _get_active_topic_and_decisions(uuid)
     
     if decisions:
-        decision_text = truncate_decisions(decisions)
+        lines = []
+        for d in decisions:
+            label = f"[{d['created_at'][:16]}"
+            if d['user_confirmed']:
+                label += ", 已确认"
+            label += f"] {d['decision']}"
+            if d.get('rationale'):
+                label += f" (原因: {d['rationale'][:120]})"
+            lines.append(label)
+        decision_text = "\n".join(lines)
         debug(f"session resumed: {conv_id}, injecting {len(decisions)} decisions")
-        # 中文翻译：
-        # ⚠️ REMORA 会话恢复警告：
-        # ============================================================
-        # 本次对话已被恢复或进行了上下文压缩！
-        # 应用程序状态和目录内容可能已发生变化。
-        # 为了保持逻辑一致性，你必须严格遵守以下从认知记忆中召回的物理锚定决策：
-        # 活跃话题: {topic_id}
-        # - {decision_text}
-        #
-        # 在任何情况下都不要忽略或覆写这些原则！
-        # ============================================================
-        decisions_from_memory = f"活跃话题: {topic_id}\n- {decision_text}"
+        decisions_from_memory = f"活跃话题: {topic_id}\n{decision_text}"
         prompt = (
             f"<system-reminder>\n"
-            f"⚠️ REMORA SESSION CONTINUATION WARNING:\n"
+            f"⚠️ SESSION RESUMED — 历史决策供参考:\n"
             f"============================================================\n"
-            f"THIS CONVERSATION HAS BEEN RESUMED OR CONTEXT-COMPACTED!\n"
-            f"APPLICATION STATE AND DIRECTORY CONTENTS MAY HAVE CHANGED.\n"
-            f"TO PRESERVE LOGICAL CONSISTENCY, YOU MUST STRICTLY COMPLY WITH THE FOLLOWING PHYSICALLY ANCHORED DECISIONS RECALLED FROM COGNITIVE MEMORY:\n"
-            f"{decisions_from_memory}\n\n"
-            f"DO NOT IGNORE OR OVERWRITE THESE PRINCIPLES UNDER ANY CIRCUMSTANCES!\n"
+            f"以下是本次话题下最近的历史决策（按时间排列）。\n"
+            f"如果其中任何一条与当前上下文冲突，请与用户讨论后再继续。\n"
+            f"{decisions_from_memory}\n"
             f"============================================================\n"
             f"</system-reminder>"
         )
         inject_steps.append({"ephemeralMessage": prompt})
         
     # 恢复物理消费，仅在消费成功且执行 Line A 后置 0
-    dao.update_cold_start(session_id, 0)
+    dao.update_cold_start(conv_id, 0)
     dao.set_hook_state(conv_id, current_turn_idx, "resume_injected", "1")
     
     return {"injectSteps": inject_steps}

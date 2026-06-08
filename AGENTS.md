@@ -144,7 +144,7 @@ New core modules: `core/storage/messages.py`, `core/storage/artifacts.py`, `core
 | `suggest_zombie_action()` | `subagent-monitor.py` | `core/liveness.py` |
 | Approval config (keywords, negation prefixes) | hardcoded in check_approval.py | `conf/approval.json` |
 
-### Phase 52 — File-touch injection (COMPLETED, uncommitted)
+### Phase 52 — File-touch injection (COMPLETED, committed)
 
 cognitive-push PreToolUse calls `get_decisions_by_file()` on write gate allow path.
 +2 test cases (#7 inject, #8 dedup).

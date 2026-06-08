@@ -54,3 +54,15 @@ def force_cold_start_latest_session(main_conv_id: Optional[str] = None) -> None:
                     SET is_cold_start = 1, updated_at = CURRENT_TIMESTAMP
                     WHERE session_id = (SELECT session_id FROM session_state ORDER BY updated_at DESC LIMIT 1)
                 """)
+
+def get_session(session_id: str):
+    """Returns (session_id, mode, is_cold_start, updated_at) or None."""
+    try:
+        with closing(get_conn()) as conn:
+            with conn:
+                return conn.execute(
+                    "SELECT session_id, mode, is_cold_start, updated_at FROM session_state WHERE session_id=?", 
+                    (session_id,)).fetchone()
+    except Exception as e:
+        log_warn(f"get_session: {e}")
+        return None

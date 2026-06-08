@@ -112,3 +112,16 @@ def upsert_topic(conn, project_uuid: str, topic_id: str, summary: str, confidenc
 def get_all_project_uuids(conn) -> list:
     cursor = conn.execute("SELECT DISTINCT uuid FROM project_topics")
     return [row[0] for row in cursor.fetchall()]
+
+def get_active_topic_created_at(project_uuid: str) -> Optional[str]:
+    try:
+        with closing(get_conn()) as conn:
+            with conn:
+                row = conn.execute(
+                    "SELECT created_at FROM project_topics WHERE uuid=? AND status='open' LIMIT 1",
+                    (project_uuid,)
+                ).fetchone()
+                return row[0] if row else None
+    except Exception as e:
+        log_warn(f"get_active_topic_created_at: {e}")
+        return None

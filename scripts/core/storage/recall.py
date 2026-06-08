@@ -28,9 +28,21 @@ def recall_fts5_logs(project_uuid: str, conv_id: str, keyword: str, limit: int =
         log_warn(f"recall_fts5_logs: {e}")
         return []
 
+def _build_evidence_texts(conn, evidence_ids_json):
+    evidence_texts = []
+    if evidence_ids_json:
+        try:
+            msg_ids = json.loads(evidence_ids_json)
+            for mid in msg_ids:
+                msg_row = conn.execute("SELECT content FROM messages WHERE id=?", (mid,)).fetchone()
+                if msg_row:
+                    evidence_texts.append(msg_row[0][:200] + "...")
+        except Exception:
+            pass
+    return f" [证据: {' | '.join(evidence_texts)}]" if evidence_texts else ""
+
 def recall_decisions_by_fts5_topic(project_uuid: str, conv_id: str, keyword: str) -> List[str]:
     try:
-        import json
         safe_keyword = keyword.replace('"', '""')
         with closing(get_conn()) as conn:
             with conn:
@@ -55,17 +67,7 @@ def recall_decisions_by_fts5_topic(project_uuid: str, conv_id: str, keyword: str
                 
                 results = []
                 for topic_id, decision, rationale, evidence_ids_json in cursor.fetchall():
-                    evidence_texts = []
-                    if evidence_ids_json:
-                        try:
-                            msg_ids = json.loads(evidence_ids_json)
-                            for mid in msg_ids:
-                                msg_row = conn.execute("SELECT content FROM messages WHERE id=?", (mid,)).fetchone()
-                                if msg_row:
-                                    evidence_texts.append(msg_row[0][:200] + "...")
-                        except:
-                            pass
-                    evidence_str = f" [证据: {' | '.join(evidence_texts)}]" if evidence_texts else ""
+                    evidence_str = _build_evidence_texts(conn, evidence_ids_json)
                     results.append(f"[{topic_id}] {decision} (原因: {rationale}){evidence_str}")
                 return results
     except Exception as e:
@@ -74,7 +76,6 @@ def recall_decisions_by_fts5_topic(project_uuid: str, conv_id: str, keyword: str
 
 def recall_decisions_by_like(project_uuid: str, conv_id: str, keyword: str, limit: int = 5) -> List[str]:
     try:
-        import json
         # Prevent LIKE wildcard injection
         safe_keyword = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         like_pattern = f"%{safe_keyword}%"
@@ -91,17 +92,7 @@ def recall_decisions_by_like(project_uuid: str, conv_id: str, keyword: str, limi
                 
                 results = []
                 for topic_id, decision, rationale, evidence_ids_json in cursor.fetchall():
-                    evidence_texts = []
-                    if evidence_ids_json:
-                        try:
-                            msg_ids = json.loads(evidence_ids_json)
-                            for mid in msg_ids:
-                                msg_row = conn.execute("SELECT content FROM messages WHERE id=?", (mid,)).fetchone()
-                                if msg_row:
-                                    evidence_texts.append(msg_row[0][:200] + "...")
-                        except:
-                            pass
-                    evidence_str = f" [证据: {' | '.join(evidence_texts)}]" if evidence_texts else ""
+                    evidence_str = _build_evidence_texts(conn, evidence_ids_json)
                     results.append(f"[{topic_id}] {decision} (原因: {rationale}){evidence_str}")
                 return results
     except Exception as e:

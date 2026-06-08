@@ -1,6 +1,6 @@
 from core.storage.sessions import (
     read_mode, write_mode, get_latest_session, update_cold_start,
-    force_cold_start_latest_session
+    force_cold_start_latest_session, get_session
 )
 from core.storage.messages import (
     get_watermark, get_max_line_number, insert_message, get_max_message_id,
@@ -15,7 +15,7 @@ from core.storage.topics import (
     get_topics_by_uuid,
     touch_topic_source_manual, merge_physical_files_to_topic,
     get_open_topic, get_topic_files, update_topic_files, upsert_topic,
-    get_all_project_uuids
+    get_all_project_uuids, get_active_topic_created_at
 )
 from core.storage.artifacts import (
     get_plan_change_time, get_user_messages_after, get_plan_content,
@@ -27,7 +27,8 @@ from core.storage.decisions import (
     get_confirmed_decisions, confirm_decision, get_topic_id_by_decision,
     decision_exists, supersede_unconfirmed,
     get_pending_decisions, confirm_decisions_by_ids,
-    insert_decision
+    insert_decision, get_decision_confirmed, get_confirmed_decision_ids,
+    get_recent_decisions
 )
 from core.storage.recall import (
     recall_fts5_logs, recall_decisions_by_fts5_topic,
@@ -40,7 +41,7 @@ from core.storage.file_changes import (
     insert_file_change, get_files_by_topic, get_decisions_by_file
 )
 from core.storage.watermarks import (
-    get_project_uuid_by_conv, watermark_exists, get_active_topic_created_at
+    get_project_uuid_by_conv, watermark_exists
 )
 from core.storage.runtime_state import (
     get_runtime_hook_value, set_runtime_hook_value, delete_runtime_hook_value,

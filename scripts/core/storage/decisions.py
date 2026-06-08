@@ -94,3 +94,22 @@ def insert_decision(conn, project_uuid: str, topic_id: str, conversation_id: str
            (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, user_confirmed, decision_type)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, user_confirmed, decision_type))
+
+
+def get_decision_confirmed(conn, decision_id: int) -> bool:
+    row = conn.execute("SELECT user_confirmed FROM topic_decisions WHERE id=?", (decision_id,)).fetchone()
+    return bool(row and row[0] == 1)
+
+
+def get_confirmed_decision_ids(conn, project_uuid: str) -> set:
+    cursor = conn.execute(
+        "SELECT id FROM topic_decisions WHERE project_uuid=? AND user_confirmed=1",
+        (project_uuid,))
+    return {row[0] for row in cursor.fetchall()}
+
+def get_recent_decisions(conn, project_uuid: str, topic_id: str, limit: int = 5) -> list:
+    """Returns recent decisions (both uc=0 and uc=1) sorted by created_at DESC."""
+    cursor = conn.execute(
+        "SELECT decision, rationale, user_confirmed, created_at FROM topic_decisions WHERE project_uuid=? AND topic_id=? ORDER BY created_at DESC LIMIT ?",
+        (project_uuid, topic_id, limit))
+    return [{"decision": r[0], "rationale": r[1], "user_confirmed": r[2], "created_at": r[3]} for r in cursor.fetchall()]

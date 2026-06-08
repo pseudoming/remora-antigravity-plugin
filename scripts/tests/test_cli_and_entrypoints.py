@@ -508,9 +508,11 @@ def test_cognitive_push_pre_invoke_success():
     with patch("sys.argv", ["cognitive-push.py", "--stage", "pre-invoke"]):
         # 1. Mode is strict, is cold start
         with patch("cognitive_push.dao.get_latest_session", return_value=("c1", 1)), \
+             patch("cognitive_push.dao.get_session", return_value=("c1", "strict", 1, "2026-01-01")), \
              patch("cognitive_push.dao.get_project_uuid_by_conv", return_value="p1"), \
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
-             patch("cognitive_push.dao.get_confirmed_decisions", return_value=[{"text": "dec_text"}]), \
+             patch("core.storage.connection.get_conn"), \
+             patch("core.storage.decisions.get_recent_decisions", return_value=[{"decision": "dec_text", "rationale": "", "user_confirmed": 0, "created_at": "2026-01-01T00:00:00"}]), \
              patch("cognitive_push.dao.read_mode", return_value="strict"), \
              patch("cognitive_push.dao.get_hook_state", return_value=None), \
              patch("cognitive_push.dao.set_hook_state"), \
@@ -527,9 +529,11 @@ def test_cognitive_push_pre_invoke_success():
 
         # 2. Mode is relax and is cold start (both warnings should be injected)
         with patch("cognitive_push.dao.get_latest_session", return_value=("c1", 1)), \
+             patch("cognitive_push.dao.get_session", return_value=("c1", "relax", 1, "2026-01-01")), \
              patch("cognitive_push.dao.get_project_uuid_by_conv", return_value="p1"), \
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
-             patch("cognitive_push.dao.get_confirmed_decisions", return_value=[{"text": "dec_text"}]), \
+             patch("core.storage.connection.get_conn"), \
+             patch("core.storage.decisions.get_recent_decisions", return_value=[{"decision": "dec_text", "rationale": "", "user_confirmed": 0, "created_at": "2026-01-01T00:00:00"}]), \
              patch("cognitive_push.dao.read_mode", return_value="relax"), \
              patch("cognitive_push.dao.get_hook_state", return_value=None), \
              patch("cognitive_push.dao.set_hook_state"), \
@@ -542,7 +546,7 @@ def test_cognitive_push_pre_invoke_success():
             msg1 = res["injectSteps"][0]["ephemeralMessage"]
             msg2 = res["injectSteps"][1]["ephemeralMessage"]
             assert "COORDINATOR BEHAVIORAL DISCIPLINE" in msg1
-            assert "REMORA SESSION CONTINUATION WARNING" in msg2
+            assert "SESSION RESUMED — 历史决策供参考" in msg2
 
 
 def test_cognitive_push_pre_tool_use():
@@ -565,11 +569,13 @@ def test_cognitive_push_pre_tool_use():
         with patch("cognitive_push.dao.get_latest_session", return_value=("c1", 1)), \
              patch("cognitive_push.dao.get_project_uuid_by_conv", return_value="p1"), \
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
+             patch("core.storage.connection.get_conn"), \
+             patch("core.storage.decisions.get_recent_decisions", return_value=[]), \
              patch("cognitive_push.dao.get_hook_state", return_value=None), \
              patch("cognitive_push.dao.set_hook_state"), \
              patch("lib.dao.get_hook_state", return_value=None), \
              patch("lib.dao.set_hook_state"):
-             
+            
             res = cognitive_push.main.__wrapped__(ctx_protect)
             assert len(res["injectSteps"]) == 1
             msg = res["injectSteps"][0]["ephemeralMessage"]
@@ -580,7 +586,8 @@ def test_cognitive_push_pre_tool_use():
         with patch("cognitive_push.dao.get_latest_session", return_value=("c1", 1)), \
              patch("cognitive_push.dao.get_project_uuid_by_conv", return_value="p1"), \
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
-             patch("cognitive_push.dao.get_confirmed_decisions", return_value=[{"text": "dec_text", "files": ["other.py"]}]), \
+             patch("core.storage.connection.get_conn"), \
+             patch("core.storage.decisions.get_recent_decisions", return_value=[]), \
              patch("lib.dao.get_hook_state", return_value=None), \
              patch("lib.dao.set_hook_state") as mock_set:
              
@@ -593,7 +600,8 @@ def test_cognitive_push_pre_tool_use():
         with patch("cognitive_push.dao.get_latest_session", return_value=("c1", 1)), \
              patch("cognitive_push.dao.get_project_uuid_by_conv", return_value="p1"), \
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
-             patch("cognitive_push.dao.get_confirmed_decisions", return_value=[{"text": "dec_text", "files": ["other.py"]}]), \
+             patch("core.storage.connection.get_conn"), \
+             patch("core.storage.decisions.get_recent_decisions", return_value=[]), \
              patch("cognitive_push.dao.insert_file_change") as mock_insert_fc, \
              patch("lib.dao.get_hook_state", return_value="1"), \
              patch("lib.dao.set_hook_state") as mock_set:
@@ -611,10 +619,11 @@ def test_cognitive_push_pre_tool_use():
         with patch("cognitive_push.dao.get_latest_session", return_value=("c1", 1)), \
              patch("cognitive_push.dao.get_project_uuid_by_conv", return_value="p1"), \
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
-             patch("cognitive_push.dao.get_confirmed_decisions", return_value=[{"text": "dec_text", "files": ["other.py"]}]), \
+             patch("core.storage.connection.get_conn"), \
+             patch("core.storage.decisions.get_recent_decisions", return_value=[]), \
              patch("lib.dao.get_hook_state", return_value=None), \
              patch("lib.dao.set_hook_state"):
-             
+            
             res = cognitive_push.main.__wrapped__(ctx_artifact)
             assert res == {"injectSteps": []}
 
@@ -622,6 +631,8 @@ def test_cognitive_push_pre_tool_use():
         with patch("cognitive_push.dao.get_latest_session", return_value=("c1", 1)), \
              patch("cognitive_push.dao.get_project_uuid_by_conv", return_value="p1"), \
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
+             patch("core.storage.connection.get_conn"), \
+             patch("core.storage.decisions.get_recent_decisions", return_value=[]), \
              patch("cognitive_push.dao.get_decisions_by_file", return_value=[
                  {"decision": "Use JWT auth", "rationale": "stateless"},
                  {"decision": "Refresh token 7d rotation", "rationale": "security"}
@@ -641,6 +652,8 @@ def test_cognitive_push_pre_tool_use():
         with patch("cognitive_push.dao.get_latest_session", return_value=("c1", 1)), \
              patch("cognitive_push.dao.get_project_uuid_by_conv", return_value="p1"), \
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
+             patch("core.storage.connection.get_conn"), \
+             patch("core.storage.decisions.get_recent_decisions", return_value=[]), \
              patch("cognitive_push.dao.get_decisions_by_file", return_value=[
                  {"decision": "Use JWT auth", "rationale": "stateless"}
              ]), \

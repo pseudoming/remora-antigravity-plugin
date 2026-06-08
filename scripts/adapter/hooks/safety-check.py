@@ -69,7 +69,7 @@ def main(context):
             mode = read_mode(conv_id, "strict")
 
     # Timeline trimming (Timeline Trimming)
-    from lib.dao import get_hook_state, set_hook_state, delete_hook_state, trim_hook_states
+    from lib.dao import get_hook_state, set_hook_state, trim_hook_states
     from adapter.bridge.conversation import ConversationDataAccessLayer
     
     cdal = ConversationDataAccessLayer(conv_id)

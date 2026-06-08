@@ -13,7 +13,7 @@ if scripts_dir not in sys.path:
 
 from lib import dao
 from core.logger import warn, debug
-from core.liveness import parse_sqlite_timestamp, find_all_uuids
+from core.liveness import parse_sqlite_timestamp, find_all_uuids, judge_zombie
 from core.storage.messages import get_latest_non_user_messages
 
 def run_audit(conv_id: str, parent_conv_id: str = None) -> dict:
@@ -73,26 +73,23 @@ def run_audit(conv_id: str, parent_conv_id: str = None) -> dict:
  
     # 3. 判定逻辑
     status = progress_data.get("status")
-    last_updated_at_val = progress_data.get("last_updated_at")
     
     now_utc = datetime.now(timezone.utc).timestamp()
-    now_local = time.time()
     
     progress_ts = 0.0
+    last_updated_at_val = progress_data.get("last_updated_at")
     if last_updated_at_val:
         try:
             progress_ts = float(last_updated_at_val)
         except ValueError:
             pass
             
-    # 如果任务已经 completed，绝对不判定为卡死
     if status == "completed":
         return {
             "liveness": "alive",
             "reason": "Task is already completed."
         }
         
-    # 如果 status == "blocked" 或者数据库里匹配到高危阻碍，判定为卡死阻碍
     if status == "blocked" or db_blocked:
         blocked_msg = progress_data.get('details', '') if status == "blocked" else db_blocked_reason
         return {
@@ -102,20 +99,17 @@ def run_audit(conv_id: str, parent_conv_id: str = None) -> dict:
         
     progress_elapsed = -1.0
     if progress_ts > 0:
-        progress_elapsed = now_local - progress_ts
+        progress_elapsed = time.time() - progress_ts
         
     msg_elapsed = -1.0
     if latest_msg_ts > 0:
         msg_elapsed = now_utc - latest_msg_ts
         
-    is_dead = False
-    death_reason = ""
-    
     active_elapseds = []
     if progress_elapsed >= 0:
-        active_elapseds.append(("progress_json", progress_elapsed))
+        active_elapseds.append(progress_elapsed)
     if msg_elapsed >= 0:
-        active_elapseds.append(("db_messages", msg_elapsed))
+        active_elapseds.append(msg_elapsed)
         
     if not active_elapseds:
         if not progress_exists:
@@ -127,17 +121,11 @@ def run_audit(conv_id: str, parent_conv_id: str = None) -> dict:
             is_dead = True
             death_reason = "Progress file exists but contains no valid timestamp."
     else:
-        min_source, min_elapsed = min(active_elapseds, key=lambda x: x[1])
-        
-        # 动态超时阈值定义：重型任务（如运行命令或静态全文检索）放开至 180s
-        threshold = 120.0
-        prog_details = progress_data.get("details", "")
-        if prog_details and any(kw in prog_details.lower() for kw in ("run_command", "grep_search", "run_persistent")):
-            threshold = 180.0
-            
-        if min_elapsed > threshold:
-            is_dead = True
-            death_reason = f"Liveness timeout: last updated {min_elapsed:.1f}s ago via {min_source} (Threshold: {threshold}s)."
+        idle_seconds = int(min(active_elapseds))
+        is_zombie, limit = judge_zombie(idle_seconds, latest_msg_role or "unknown")
+        is_dead = is_zombie
+        if is_dead:
+            death_reason = f"Liveness timeout: last updated {idle_seconds}s ago (Threshold: {limit}s)."
     
     idle_seconds = msg_elapsed if msg_elapsed >= 0 else progress_elapsed
     last_tool_name = latest_msg_role or "unknown"
