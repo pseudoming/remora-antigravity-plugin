@@ -1,8 +1,6 @@
 import os
 
 from core.liveness import (
-    HARD_KEYWORDS,
-    SOFT_KEYWORDS,
     RELAX_PATTERN,
     HEAVY_TOOLS,
     clean_system_reminders,
@@ -40,31 +38,70 @@ def test_clean_system_reminders_multiline():
 
 
 def test_detect_mode_strict_default():
-    assert detect_mode("run this command") == "strict"
-    assert detect_mode("") == "strict"
+    assert detect_mode("run this command") == ("strict", None)
+    assert detect_mode("") == ("strict", None)
 
 
 def test_detect_mode_relax_keywords_trigger():
-    assert detect_mode("这是一个草稿") == "relax"
-    assert detect_mode("some brainstorm ideas") == "relax"
-    assert detect_mode("讨论下这个方案") == "relax"
-    assert detect_mode("let's design this") == "relax"
+    assert detect_mode("这是一个草稿") == ("relax", None)
+    assert detect_mode("some brainstorm ideas") == ("relax", None)
+    assert detect_mode("讨论这个方案") == ("relax", None)
+    assert detect_mode("let's brainstorm this") == ("relax", None)
 
 
-def test_detect_mode_hard_keyword_override():
-    hard = ["delete", "rm"]
-    assert detect_mode("delete this 草稿", hard_keywords=hard) == "strict"
-    assert detect_mode("this is a draft", hard_keywords=["delete"]) == "relax"
+def test_detect_mode_alert_keyword_override():
+    alert = ["delete", "rm"]
+    assert detect_mode("delete this 草稿", relax_keywords=[], alert_keywords=alert) == ("alert", "delete")
+    assert detect_mode("this is a draft", alert_keywords=["delete"]) == ("relax", None)
 
 
 def test_detect_mode_both_keyword_sets():
-    hard = ["delete"]
-    assert detect_mode("delete everything", hard_keywords=hard) == "strict"
+    alert = ["delete"]
+    assert detect_mode("delete everything", alert_keywords=alert) == ("alert", "delete")
 
 
 def test_detect_mode_default_params():
-    assert detect_mode("draft idea") == "relax"
-    assert detect_mode("run test") == "strict"
+    assert detect_mode("draft idea") == ("relax", None)
+    assert detect_mode("run test") == ("strict", None)
+
+
+class TestDetectMode:
+    def test_alert_keyword_returns_alert_with_word(self):
+        assert detect_mode("你清醒一点", alert_keywords=["你清醒一点"]) == ("alert", "你清醒一点")
+
+    def test_alert_overrides_relax(self):
+        assert detect_mode("讨论方案，你清醒一点", relax_keywords=["讨论"], alert_keywords=["你清醒一点"]) == ("alert", "你清醒一点")
+
+    def test_no_match_returns_strict_none(self):
+        assert detect_mode("hello world") == ("strict", None)
+
+    def test_relax_keyword_returns_relax_none(self):
+        assert detect_mode("草案讨论", relax_keywords=["草案"]) == ("relax", None)
+
+    def test_relax_no_keywords(self):
+        assert detect_mode("这是一个草稿") == ("relax", None)
+
+    def test_empty_relax_fallsback_to_regex(self):
+        assert detect_mode("draft idea", relax_keywords=[]) == ("relax", None)
+
+    def test_multiple_alert_returns_first_match(self):
+        assert detect_mode("你好 再见", alert_keywords=["你好", "再见"]) == ("alert", "你好")
+
+    def test_case_insensitive_alert(self):
+        assert detect_mode("UPPERCASE DELETE", alert_keywords=["delete"]) == ("alert", "delete")
+
+    def test_case_insensitive_relax(self):
+        assert detect_mode("UPPERCASE DRAFT", relax_keywords=["draft"]) == ("relax", None)
+
+    def test_alert_word_none_for_strict(self):
+        mode, word = detect_mode("hello world")
+        assert mode == "strict"
+        assert word is None
+
+    def test_alert_word_none_for_relax(self):
+        mode, word = detect_mode("draft idea")
+        assert mode == "relax"
+        assert word is None
 
 
 def test_parse_sqlite_timestamp_none():

@@ -636,7 +636,7 @@ def test_session_guardian_success(tmp_path, capsys):
     # Write mock keywords.json
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": ["strict_kw"], "soft_keywords": ["relax_kw"]}, f)
+        json.dump({"relax_keywords": ["brainstorm", "discuss"], "alert_keywords": []}, f)
 
     context = {
         "transcriptPath": f"/tmp/brain/conv_1/transcript.jsonl"
@@ -644,7 +644,7 @@ def test_session_guardian_success(tmp_path, capsys):
 
     # Setup CDAL mock steps and stats mock
     mock_steps = [
-        {"type": "USER_INPUT", "content": "Let's discuss design of this project"},
+        {"type": "USER_INPUT", "content": "Let's discuss brainstorm ideas for this project"},
         {"type": "PLANNER_RESPONSE", "tool_calls": [{"name": "schedule", "args": {"DurationSeconds": "30", "Prompt": "subagent-monitor.py fake_uuid c1"}}]}
     ]
 
@@ -762,7 +762,7 @@ def test_session_guardian_subagent_warning(tmp_path):
     # Write mock keywords.json
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
 
     context = {
         "transcriptPath": f"/tmp/brain/conv_1/transcript.jsonl"
@@ -1273,7 +1273,7 @@ def test_session_guardian_subagent_warning_history_fallback(tmp_path):
     # Write mock keywords.json
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
 
     context = {
         "transcriptPath": f"/tmp/brain/conv_1/transcript.jsonl"
@@ -1403,7 +1403,7 @@ def test_session_guardian_main_syspath_insert(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1428,7 +1428,7 @@ def test_session_guardian_env_write_exception(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1449,7 +1449,7 @@ def test_session_guardian_transcript_no_match(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1470,7 +1470,7 @@ def test_session_guardian_should_write_false(tmp_path):
     main_id_file.write_text("existing_conv")
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     # Mock subprocess.run so get_subagent_type works and returns None
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
@@ -1499,7 +1499,7 @@ def test_session_guardian_exception_writing_main_id(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1527,7 +1527,7 @@ def test_session_guardian_all_skip_types_loop_exhaust(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1554,7 +1554,7 @@ def test_session_guardian_non_user_input_break(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1579,7 +1579,7 @@ def test_session_guardian_step_parsing_exception(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1628,7 +1628,7 @@ def test_session_guardian_no_heartbeat_steps(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1647,7 +1647,7 @@ def test_session_guardian_schedule_no_subagent_monitor(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1673,7 +1673,7 @@ def test_session_guardian_uuid_already_set(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1704,7 +1704,7 @@ def test_session_guardian_uuid_matches_conv(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1744,7 +1744,7 @@ def test_session_guardian_manage_subagents_kill(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1771,7 +1771,7 @@ def test_session_guardian_system_confirm_kill(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1797,7 +1797,7 @@ def test_session_guardian_terminated_subagent_confirm(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1827,7 +1827,7 @@ def test_session_guardian_pass2_no_activity_match(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1853,7 +1853,7 @@ def test_session_guardian_pass2_history_type_skip(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1881,7 +1881,7 @@ def test_session_guardian_retry_cleanup_exception(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1913,7 +1913,7 @@ def test_session_guardian_role_name_cache_exception(tmp_path):
     env_file.write_text("{corrupt}")
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1943,7 +1943,7 @@ def test_session_guardian_role_name_history_fallback_type_on_args(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -1975,7 +1975,7 @@ def test_session_guardian_role_name_no_subagents_list(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -2008,7 +2008,7 @@ def test_session_guardian_role_name_history_exception(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
@@ -2036,30 +2036,142 @@ def test_session_guardian_role_name_history_exception(tmp_path):
 # Branch coverage: 322 (hard keyword override), 334->338 (is_new_turn cleanup), 346-347 (stats exception)
 # =====================================================================
 
-def test_session_guardian_hard_keyword_override(tmp_path):
+def test_session_guardian_alert_keyword_triggers_recall(tmp_path):
     runtime_dir = tmp_path / ".runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": ["override_kw"], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": ["override_kw"]}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \
          patch("session_guardian.get_stats", return_value={"accumulated_source_bytes": 0, "accumulated_data_bytes": 0}), \
          patch("lib.dao.write_mode") as mock_write_mode, \
-         patch("subprocess.run") as mock_run:
-        mock_res = MagicMock()
-        mock_res.returncode = 1
-        mock_run.return_value = mock_res
+         patch("lib.dao.get_hook_state"), \
+         patch("lib.dao.set_hook_state"):
         mock_cdal = MagicMock()
-        # User message contains both relax keyword AND hard keyword -> hard wins -> strict
         mock_cdal.stream_steps_reverse.return_value = [
             {"type": "USER_INPUT", "content": "Let's discuss the override_kw together"},
         ]
+        mock_cdal.get_current_turn_idx.return_value = 5
         mock_cdal_cls.return_value = mock_cdal
-        session_guardian.main.__wrapped__({"transcriptPath": "/tmp/brain/conv_1/t.jsonl"})
+        res = session_guardian.main.__wrapped__({"transcriptPath": "/tmp/brain/conv_1/t.jsonl"})
+        mock_write_mode.assert_called_once_with("conv_1", "alert")
+        recall_msgs = [s for s in res["injectSteps"] if "MEMORY DEFENSE" in s.get("ephemeralMessage", "")]
+        assert len(recall_msgs) >= 1
+        assert "override_kw" in recall_msgs[0]["ephemeralMessage"]
+
+
+def test_session_guardian_strict_suggests_recall(tmp_path):
+    """strict mode + distance >= 3 → injects 📓 suggested recall"""
+    runtime_dir = tmp_path / ".runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "installed.flag").touch()
+    keywords_path = _KEYWORDS_PATH
+    with open(keywords_path, 'w') as f:
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
+    with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
+         patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
+         patch("session_guardian.cleanup"), \
+         patch("session_guardian.get_stats", return_value={"accumulated_source_bytes": 0, "accumulated_data_bytes": 0}), \
+         patch("lib.dao.write_mode") as mock_write_mode, \
+         patch("lib.dao.get_hook_state", return_value=None) as mock_get_hs, \
+         patch("lib.dao.set_hook_state") as mock_set_hs:
+        mock_cdal = MagicMock()
+        mock_cdal.stream_steps_reverse.return_value = [
+            {"type": "USER_INPUT", "content": "hello world"},
+        ]
+        mock_cdal.get_current_turn_idx.return_value = 5
+        mock_cdal_cls.return_value = mock_cdal
+        res = session_guardian.main.__wrapped__({"transcriptPath": "/tmp/brain/conv_1/t.jsonl"})
         mock_write_mode.assert_called_once_with("conv_1", "strict")
+        recall_msgs = [s for s in res["injectSteps"] if "cross-check with remora-recall" in s.get("ephemeralMessage", "")]
+        assert len(recall_msgs) >= 1
+        mock_set_hs.assert_called_with("conv_1", -1, "last_recall_turn", "5")
+
+
+def test_session_guardian_alert_overrides_relax(tmp_path):
+    """alert keyword + relax pattern → alert mode + 🚨 recall"""
+    runtime_dir = tmp_path / ".runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "installed.flag").touch()
+    keywords_path = _KEYWORDS_PATH
+    with open(keywords_path, 'w') as f:
+        json.dump({"relax_keywords": ["讨论"], "alert_keywords": ["搞什么"]}, f)
+    with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
+         patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
+         patch("session_guardian.cleanup"), \
+         patch("session_guardian.get_stats", return_value={"accumulated_source_bytes": 0, "accumulated_data_bytes": 0}), \
+         patch("lib.dao.write_mode") as mock_write_mode, \
+         patch("lib.dao.get_hook_state"), \
+         patch("lib.dao.set_hook_state"):
+        mock_cdal = MagicMock()
+        mock_cdal.stream_steps_reverse.return_value = [
+            {"type": "USER_INPUT", "content": "我们讨论一下草案，搞什么"},
+        ]
+        mock_cdal.get_current_turn_idx.return_value = 3
+        mock_cdal_cls.return_value = mock_cdal
+        res = session_guardian.main.__wrapped__({"transcriptPath": "/tmp/brain/conv_1/t.jsonl"})
+        mock_write_mode.assert_called_once_with("conv_1", "alert")
+        recall_msgs = [s for s in res["injectSteps"] if "MEMORY DEFENSE" in s.get("ephemeralMessage", "")]
+        assert len(recall_msgs) >= 1
+        assert "搞什么" in recall_msgs[0]["ephemeralMessage"]
+
+
+def test_session_guardian_relax_mode_no_recall(tmp_path):
+    """relax mode → no recall injection at all"""
+    runtime_dir = tmp_path / ".runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "installed.flag").touch()
+    keywords_path = _KEYWORDS_PATH
+    with open(keywords_path, 'w') as f:
+        json.dump({"relax_keywords": ["讨论"], "alert_keywords": []}, f)
+    with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
+         patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
+         patch("session_guardian.cleanup"), \
+         patch("session_guardian.get_stats", return_value={"accumulated_source_bytes": 0, "accumulated_data_bytes": 0}), \
+         patch("lib.dao.write_mode") as mock_write_mode, \
+         patch("lib.dao.get_hook_state"), \
+         patch("lib.dao.set_hook_state"):
+        mock_cdal = MagicMock()
+        mock_cdal.stream_steps_reverse.return_value = [
+            {"type": "USER_INPUT", "content": "讨论一下草案"},
+        ]
+        mock_cdal.get_current_turn_idx.return_value = 5
+        mock_cdal_cls.return_value = mock_cdal
+        res = session_guardian.main.__wrapped__({"transcriptPath": "/tmp/brain/conv_1/t.jsonl"})
+        mock_write_mode.assert_called_once_with("conv_1", "relax")
+        recall_msgs = [s for s in res["injectSteps"] if "remora-recall" in s.get("ephemeralMessage", "")]
+        assert len(recall_msgs) == 0
+
+
+def test_session_guardian_strict_recall_distance_gate(tmp_path):
+    """strict mode but distance < 3 → NO recall injected"""
+    runtime_dir = tmp_path / ".runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / "installed.flag").touch()
+    keywords_path = _KEYWORDS_PATH
+    with open(keywords_path, 'w') as f:
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
+    with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
+         patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
+         patch("session_guardian.cleanup"), \
+         patch("session_guardian.get_stats", return_value={"accumulated_source_bytes": 0, "accumulated_data_bytes": 0}), \
+         patch("lib.dao.write_mode") as mock_write_mode, \
+         patch("lib.dao.get_hook_state", return_value="1") as mock_get_hs, \
+         patch("lib.dao.set_hook_state") as mock_set_hs:
+        mock_cdal = MagicMock()
+        mock_cdal.stream_steps_reverse.return_value = [
+            {"type": "USER_INPUT", "content": "hello"},
+        ]
+        mock_cdal.get_current_turn_idx.return_value = 2
+        mock_cdal_cls.return_value = mock_cdal
+        res = session_guardian.main.__wrapped__({"transcriptPath": "/tmp/brain/conv_1/t.jsonl"})
+        mock_write_mode.assert_called_once_with("conv_1", "strict")
+        recall_msgs = [s for s in res["injectSteps"] if "remora-recall" in s.get("ephemeralMessage", "")]
+        assert len(recall_msgs) == 0
+        mock_set_hs.assert_not_called()
 
 
 def test_session_guardian_is_new_turn_cleanup(tmp_path):
@@ -2068,7 +2180,7 @@ def test_session_guardian_is_new_turn_cleanup(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup") as mock_cleanup, \
@@ -2093,7 +2205,7 @@ def test_session_guardian_stats_exception(tmp_path):
     (runtime_dir / "installed.flag").touch()
     keywords_path = _KEYWORDS_PATH
     with open(keywords_path, 'w') as f:
-        json.dump({"hard_keywords": [], "soft_keywords": []}, f)
+        json.dump({"relax_keywords": [], "alert_keywords": []}, f)
     with patch("session_guardian.get_data_dir", return_value=str(tmp_path)), patch("adapter.bridge.paths.get_data_dir", return_value=str(tmp_path)), \
          patch("adapter.bridge.conversation.ConversationDataAccessLayer") as mock_cdal_cls, \
          patch("session_guardian.cleanup"), \

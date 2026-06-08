@@ -2,10 +2,7 @@ import re
 from datetime import datetime, timezone
 from typing import List, Optional, Set, Tuple, Union
 
-HARD_KEYWORDS: List[str] = []
-SOFT_KEYWORDS: List[str] = []
-
-RELAX_PATTERN = r'(草稿|想法|设计|讨论|讨论下|建议|draft|brainstorm|design|suggest|discuss)'
+RELAX_PATTERN = r'(草稿|想法|讨论|draft|brainstorm|discuss)'
 
 HEAVY_TOOLS: Set[str] = {"run_command", "grep_search"}
 
@@ -14,13 +11,26 @@ def clean_system_reminders(text: str) -> str:
     return re.sub(r'<system-reminder>.*?</system-reminder>', '', text, flags=re.DOTALL)
 
 
-def detect_mode(clean_msg: str, hard_keywords: Optional[List[str]] = None, soft_keywords: Optional[List[str]] = None) -> str:
+def detect_mode(clean_msg: str, relax_keywords: Optional[List[str]] = None, alert_keywords: Optional[List[str]] = None) -> tuple:
     mode = "strict"
-    if re.search(RELAX_PATTERN, clean_msg, re.IGNORECASE):
+    matched_word = None
+
+    if relax_keywords:
+        for kw in relax_keywords:
+            if kw.lower() in clean_msg.lower():
+                mode = "relax"
+                break
+    elif re.search(RELAX_PATTERN, clean_msg, re.IGNORECASE):
         mode = "relax"
-    if hard_keywords and re.search(r'(' + '|'.join(hard_keywords) + r')', clean_msg, re.IGNORECASE):
-        mode = "strict"
-    return mode
+
+    if alert_keywords:
+        for kw in alert_keywords:
+            if kw.lower() in clean_msg.lower():
+                mode = "alert"
+                matched_word = kw
+                break
+
+    return mode, matched_word
 
 
 def parse_sqlite_timestamp(ts_val) -> float:

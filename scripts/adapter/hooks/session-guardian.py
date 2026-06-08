@@ -7,7 +7,7 @@ from core.logger import warn, error
 
 import json, re, subprocess
 from adapter.bridge.subagent import get_subagent_type
-from core.liveness import clean_system_reminders, detect_mode, HARD_KEYWORDS, SOFT_KEYWORDS
+from core.liveness import clean_system_reminders, detect_mode
 from adapter.bridge.paths import get_data_dir, extract_conv_id, find_plugin_root
 from lib import dao
 
@@ -79,13 +79,13 @@ def main(context):
         pass
     
     keywords_config_path = os.path.join(find_plugin_root(), 'conf', 'keywords.json')
-    hard_kws = []
-    soft_kws = []
+    relax_kws = []
+    alert_kws = []
     try:
         with open(keywords_config_path, 'r') as f:
             config = json.load(f)
-            hard_kws = config.get("hard_keywords", [])
-            soft_kws = config.get("soft_keywords", [])
+            relax_kws = config.get("relax_keywords", [])
+            alert_kws = config.get("alert_keywords", [])
     except Exception:
         pass
         
@@ -249,14 +249,39 @@ def main(context):
     # 正则剥离所有系统提示内容，只保留用户的原生真实意图。
 
     # 意图探测逻辑
-    # 剥离前置注入的系统提醒，防止其携带的关键字（例如提醒中包含的路径/remora/）引发无限自反馈死循环
+    # 剥离前置注入的系统提醒，防止其携带的关键字引发无限自反馈死循环
     clean_msg = clean_system_reminders(last_msg)
 
-    # 模式检测自适应：若包含探讨发散性关键词（草稿、想法、设计、讨论、讨论下、建议），设定为 relax，否则 strict
-    mode = detect_mode(clean_msg, hard_keywords=hard_kws, soft_keywords=soft_kws)
-        
-    # 跨进程状态机同步 (写入 SQLite session_state 同步表，支持多拦截器 IPC)
-    # 首次插入 is_cold_start = 1，更新时保持原有 is_cold_start，将其消费职责留给 Phase 26
+    mode, alert_word = detect_mode(clean_msg, relax_keywords=relax_kws, alert_keywords=alert_kws)
+
+    if alert_word:
+        recall_cmd = f"python3 scripts/adapter/cli/remora-recall.py \"{alert_word}\""
+        inject_steps.append({"ephemeralMessage":
+            f"<system-reminder>\n"
+            f"🚨 MEMORY DEFENSE TRIGGERED: STOP GUESSING.\n"
+            f"The user appears frustrated ('{alert_word}'). You MUST retrieve facts instead of guessing.\n"
+            f"Execute: {recall_cmd}\n"
+            f"</system-reminder>"
+        })
+    elif mode == "strict":
+        current_turn_idx = cdal.get_current_turn_idx()
+        try:
+            current_turn_idx = int(current_turn_idx) if current_turn_idx is not None else 0
+        except (ValueError, TypeError):
+            current_turn_idx = 0
+        last_recall = dao.get_hook_state(conv_id, -1, "last_recall_turn")
+        try:
+            last_recall = int(last_recall) if last_recall else 0
+        except (ValueError, TypeError):
+            last_recall = 0
+        if current_turn_idx - last_recall >= 3:
+            inject_steps.append({"ephemeralMessage":
+                "<system-reminder>\n"
+                "📓 Before finalizing a new decision, cross-check with remora-recall.py. If a past decision conflicts with your current plan, discuss with the user before proceeding.\n"
+                "</system-reminder>"
+            })
+            dao.set_hook_state(conv_id, -1, "last_recall_turn", str(current_turn_idx))
+
     dao.write_mode(conv_id, mode)
 
     # ==========================================

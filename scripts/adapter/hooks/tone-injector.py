@@ -63,7 +63,7 @@ def main(context):
     mode = read_mode(conv_id, "strict")
             
     inject_steps = []
-    if mode == "strict":
+    if mode in ("strict", "alert"):
         user_input_count = cdal.get_user_input_count()
         if user_input_count % 5 == 0:
             injected_val = get_hook_state(conv_id, current_turn_idx, 'tone_injected')
