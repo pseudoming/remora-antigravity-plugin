@@ -20,6 +20,7 @@ from scan_sessions import (
 from warm_storage_sync import read_incremental_logs
 from adapter.bridge.agentapi import send_message, create_conversation
 from core.coverage import calculate_factual_confidence, validate_id_inheritance
+from core.storage.decisions import decision_exists, supersede_unconfirmed
 
 CONV_MARKER_FILE = os.path.join(DATA_DIR, "compactor_conversation_id.txt")
 BRAIN_DIR = os.path.expanduser("~/.gemini/antigravity/brain")
@@ -197,9 +198,11 @@ def process_sessions(start_time):
 
             baseline_files, baseline_actions = extract_factual_baseline(session['conversation_id'], last_msg_id)
 
-            prompt = f"""[SYSTEM CONSTRAINT]
-This is a stateless extraction task. The conversation logs provided below are completely independent of any previous messages in this session.
-You MUST ignore all previous contexts, topics, and decisions in this conversation history. Extract ADRs ONLY based on the new logs provided below.
+            prompt = f"""[STATELESS CONSTRAINT]
+THIS IS A STATELESS EXTRACTION. THE LOGS PROVIDED BELOW ARE A COMPLETELY INDEPENDENT FRAGMENT.
+YOU MUST NOT REFERENCE, REPEAT, OR RE-EXTRACT ANY DECISIONS FROM PRIOR INVOCATIONS.
+IF THE LOGS DO NOT CONTAIN ANY NEW ARCHITECTURAL DECISIONS, RETURN {{"topics": []}}.
+ONLY EXTRACT DECISIONS THAT ARE EXPLICITLY VISIBLE IN THE PROVIDED LOG FRAGMENT.
 Each line of the log is prefixed with its database ID, e.g. [msg_123]. You MUST reference these numbers.
 {topic_constraint_desc}
 
@@ -260,9 +263,19 @@ If no significant topics, output: {{"topics": []}}
                            VALUES (?, ?, ?, ?, 'auto')
                            ON CONFLICT(uuid, topic_id) DO UPDATE SET summary=?, compression_confidence=?""",
                         (session['project_uuid'], t.get('topic_id', ''),
-                         t.get('summary', ''), confidence, t.get('summary', ''), confidence))
+                          t.get('summary', ''), confidence, t.get('summary', ''), confidence))
 
-                    for d in t.get("decisions", []):
+                    decisions = t.get("decisions", [])
+                    topic_id = t.get('topic_id', '')
+                    if not decisions:
+                        continue
+
+                    supersede_unconfirmed(conn, session['project_uuid'], topic_id)
+                    for d in decisions:
+                        decision_text = d.get('decision', '')
+                        if decision_exists(conn, session['project_uuid'], topic_id, decision_text):
+                            continue
+
                         user_confirmed_val = 1 if d.get("user_confirmed", False) else 0
                         
                         evidence_msg_ids = d.get('evidence_msg_ids', [])
@@ -272,7 +285,7 @@ If no significant topics, output: {{"topics": []}}
                             """INSERT INTO topic_decisions
                                (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, user_confirmed, decision_type)
                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                            (session['project_uuid'], t.get('topic_id', ''),
+                            (session['project_uuid'], topic_id,
                              session['conversation_id'], d.get('decision', ''),
                              d.get('rationale', ''),
                              json.dumps(evidence_msg_ids),

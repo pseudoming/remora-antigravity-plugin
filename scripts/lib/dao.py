@@ -8,7 +8,8 @@ from core.storage.topics import (
     touch_topic_source_manual, merge_physical_files_to_topic
 )
 from core.storage.decisions import (
-    get_confirmed_decisions, confirm_decision, get_topic_id_by_decision
+    get_confirmed_decisions, confirm_decision, get_topic_id_by_decision,
+    decision_exists, supersede_unconfirmed
 )
 from core.storage.recall import (
     recall_fts5_logs, recall_decisions_by_fts5_topic,

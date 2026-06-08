@@ -127,6 +127,7 @@ def _handle_pre_tool_use(context, conv_id, current_turn_idx):
         if retry_status == "1":
             # 第二次尝试，清除状态直接放行 (allow)
             dao.set_hook_state(conv_id, current_turn_idx, state_key, "0")
+            dao.insert_file_change(uuid, conv_id, os.path.basename(target_file), "write_tool")
             return {"decision": "allow", "injectSteps": []}
         else:
             # 第一次尝试，记录状态为 "1"，并返回 deny 与 prompt 注入

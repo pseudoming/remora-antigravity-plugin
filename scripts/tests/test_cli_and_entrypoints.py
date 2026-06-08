@@ -594,12 +594,14 @@ def test_cognitive_push_pre_tool_use():
              patch("cognitive_push.dao.get_project_uuid_by_conv", return_value="p1"), \
              patch("cognitive_push.dao.get_active_topic", return_value="t1"), \
              patch("cognitive_push.dao.get_confirmed_decisions", return_value=[{"text": "dec_text", "files": ["other.py"]}]), \
+             patch("cognitive_push.dao.insert_file_change") as mock_insert_fc, \
              patch("lib.dao.get_hook_state", return_value="1"), \
              patch("lib.dao.set_hook_state") as mock_set:
-             
+              
             res = cognitive_push.main.__wrapped__(ctx_protect)
             assert res["decision"] == "allow"
             mock_set.assert_any_call("c1", 0, "first_write_deny:/path/to/my_file.py", "0")
+            mock_insert_fc.assert_called_once_with("p1", "c1", "my_file.py", "write_tool")
 
         # 6. Target file is artifact (should allow directly)
         ctx_artifact = {

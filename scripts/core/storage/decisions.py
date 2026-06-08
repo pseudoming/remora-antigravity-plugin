@@ -56,3 +56,18 @@ def get_topic_id_by_decision(decision_id: int) -> Optional[str]:
     except Exception as e:
         log_warn(f"get_topic_id_by_decision: {e}")
         return None
+
+def decision_exists(conn, project_uuid: str, topic_id: str, decision_text: str) -> bool:
+    """Check if an identical decision already exists for this project+topic. Uses the supplied connection for transaction consistency."""
+    row = conn.execute(
+        "SELECT id FROM topic_decisions WHERE project_uuid=? AND topic_id=? AND decision=?",
+        (project_uuid, topic_id, decision_text)
+    ).fetchone()
+    return row is not None
+
+def supersede_unconfirmed(conn, project_uuid: str, topic_id: str) -> None:
+    """Delete all user_confirmed=0 decisions for this topic before inserting a new extraction batch."""
+    conn.execute(
+        "DELETE FROM topic_decisions WHERE project_uuid=? AND topic_id=? AND user_confirmed=0",
+        (project_uuid, topic_id)
+    )
