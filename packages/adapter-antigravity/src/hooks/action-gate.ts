@@ -276,6 +276,21 @@ export function _main(context: Record<string, any>): { injectSteps: any[]; termi
       };
     }
   } else {
+    // No phantom — model actually wrote what it claimed. One-time truth check per turn.
+    const truthDone = getHookState(convId, currentTurnIdx, "truth_check");
+    if (!truthDone && hasAnyToolCalls) {
+      setHookState(convId, currentTurnIdx, "truth_check", "1");
+      return {
+        injectSteps: [{
+          ephemeralMessage:
+            "POST-WRITE TRUTH CHECK:\n" +
+            "- List every file you ACTUALLY wrote this turn. If you claimed to modify something but didn't, explain why.\n" +
+            "- If any step was skipped, state it explicitly. Don't let the user discover it later.\n" +
+            "- If an error occurred, quote it. Don't rephrase or summarize errors."
+        }],
+        terminationBehavior: "",
+      };
+    }
     return { injectSteps: [], terminationBehavior: "" };
   }
 }

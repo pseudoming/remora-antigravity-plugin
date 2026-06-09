@@ -283,7 +283,10 @@ describe("_main integration tests", () => {
     ).mockReturnValue(0);
 
     const res = _main(testEnv);
-    expect(res).toEqual({ injectSteps: [], terminationBehavior: "" });
+    expect(res.injectSteps).toBeDefined();
+    expect(res.injectSteps.length).toBe(1);
+    expect(res.injectSteps[0].ephemeralMessage).toContain("POST-WRITE TRUTH CHECK");
+    expect(res.terminationBehavior).toBe("");
   });
 
   it("test_regex_patterns", () => {

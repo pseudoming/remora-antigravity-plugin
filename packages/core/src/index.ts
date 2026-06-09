@@ -10,6 +10,7 @@ export {
   formatWriteGateDenyPrompt,
   formatPhantomFirstWarning,
   formatPhantomRepeatWarning,
+  formatJitInjection,
   formatStrictRecallReminder,
   formatStrictTonePrompt,
   formatAlertRecallPrompt,

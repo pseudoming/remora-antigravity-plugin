@@ -1097,7 +1097,8 @@ describe("cognitive_push_pre_invoke", () => {
     coreMocks.isDuplicate.mockReturnValue(false);
 
     const res = cognitivePush.main({ transcriptPath: "foo.jsonl" });
-    expect(res.injectSteps).toEqual([]);
+    expect(res.injectSteps.length).toBe(1);
+    expect((res.injectSteps[0] as any).ephemeralMessage).toContain("WORK TRACKING");
   });
 
   it("not cold start returns empty steps (is_cold_start==0, strict mode)", () => {
@@ -1109,7 +1110,8 @@ describe("cognitive_push_pre_invoke", () => {
     coreMocks.isDuplicate.mockReturnValue(false);
 
     const res = cognitivePush.main({ transcriptPath: "foo.jsonl" });
-    expect(res.injectSteps).toEqual([]);
+    expect(res.injectSteps.length).toBe(1);
+    expect((res.injectSteps[0] as any).ephemeralMessage).toContain("WORK TRACKING");
   });
 
   it("relax mode injects COORDINATOR BEHAVIORAL DISCIPLINE even if not cold start", () => {
@@ -1121,9 +1123,9 @@ describe("cognitive_push_pre_invoke", () => {
     coreMocks.isDuplicate.mockReturnValue(false);
 
     const res = cognitivePush.main({ transcriptPath: "foo.jsonl" });
-    expect(res.injectSteps.length).toBe(1);
-    const msg = (res.injectSteps[0] as any).ephemeralMessage;
-    expect(msg).toContain("COORDINATOR BEHAVIORAL DISCIPLINE");
+    expect(res.injectSteps.length).toBe(2);
+    expect((res.injectSteps[0] as any).ephemeralMessage).toContain("COORDINATOR BEHAVIORAL DISCIPLINE");
+    expect((res.injectSteps[1] as any).ephemeralMessage).toContain("WORK TRACKING");
   });
 });
 
@@ -1163,8 +1165,9 @@ describe("cognitive_push_pre_invoke_success", () => {
     conversationMocks.mockInstance.getCurrentTurnIdx = vi.fn().mockReturnValue(1);
 
     const res = cognitivePush.main({ transcriptPath: "/brain/c1/t.jsonl" });
-    expect(res.injectSteps.length).toBe(1);
-    const msg = (res.injectSteps[0] as any).ephemeralMessage;
+    expect(res.injectSteps.length).toBe(2);
+    expect((res.injectSteps[0] as any).ephemeralMessage).toContain("WORK TRACKING");
+    const msg = (res.injectSteps[1] as any).ephemeralMessage;
     expect(msg).toContain("活跃话题: t1");
     expect(msg).toContain("dec_text");
     expect(coreMocks.updateColdStart).toHaveBeenCalledWith("c1", 0);
@@ -1188,9 +1191,10 @@ describe("cognitive_push_pre_invoke_success", () => {
     conversationMocks.mockInstance.getCurrentTurnIdx = vi.fn().mockReturnValue(1);
 
     const res = cognitivePush.main({ transcriptPath: "/brain/c1/t.jsonl" });
-    expect(res.injectSteps.length).toBe(2);
+    expect(res.injectSteps.length).toBe(3);
     expect((res.injectSteps[0] as any).ephemeralMessage).toContain("COORDINATOR BEHAVIORAL DISCIPLINE");
-    expect((res.injectSteps[1] as any).ephemeralMessage).toContain("SESSION RESUMED — 历史决策供参考");
+    expect((res.injectSteps[1] as any).ephemeralMessage).toContain("WORK TRACKING");
+    expect((res.injectSteps[2] as any).ephemeralMessage).toContain("SESSION RESUMED — 历史决策供参考");
   });
 });
 

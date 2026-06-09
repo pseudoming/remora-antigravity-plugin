@@ -47,6 +47,11 @@ const coreMocks = vi.hoisted(() => ({
   makeDenyReason: vi.fn(function (prefix: string, message: string, tip: string) {
     return `${prefix}: ${message} ${tip}`;
   }),
+  formatJitInjection: vi.fn(() =>
+    "REMORA COORDINATOR JIT INJECTION: You have just launched subagents..."
+  ),
+  formatAccumulatedLimitExceeded: vi.fn(() => "CUMULATIVE READ LIMIT EXCEEDED"),
+  formatDelegationBlocked: vi.fn(() => "DELEGATION-BLOCKED"),
   enforcePromptLengthLimit: vi
     .fn()
     .mockReturnValue([false, null] as [boolean, { prefix: string; message: string; action_tip: string } | null]),

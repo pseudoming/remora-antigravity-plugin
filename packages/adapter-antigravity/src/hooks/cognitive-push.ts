@@ -60,6 +60,18 @@ function _handlePreInvocation(context: Record<string, unknown>, convId: string, 
     injectSteps.push({ ephemeralMessage: formatRelaxDisciplinePrompt("/artifacts/", ["write_to_file", "replace_file_content", "run_command"]) });
   }
 
+  // Work tracking — once per session
+  if (!isDuplicate(convId, "work_tracking", "injected")) {
+    markFired(convId, "work_tracking", "injected");
+    injectSteps.push({
+      ephemeralMessage:
+        "WORK TRACKING:\n" +
+        "If your current task requires more than 3 steps, break it into discrete subtasks.\n" +
+        "After each step completes, briefly confirm what was done before moving to the next.\n" +
+        "Don't batch completions — mark done as soon as verified."
+    });
+  }
+
   // Line C: semantic conflict detection (feature-gated)
   if (_checkLineCEnabled()) {
     try {

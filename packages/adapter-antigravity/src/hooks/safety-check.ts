@@ -13,6 +13,9 @@ import {
   inspectCommand,
   getHookState,
   setHookState,
+  formatJitInjection,
+  formatAccumulatedLimitExceeded,
+  formatDelegationBlocked,
 } from "@remora/core";
 import { accumulate } from "../bridge/stats";
 import { getSubagentType } from "../bridge/subagent";
@@ -144,10 +147,7 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
           decision: "allow",
           injectSteps: [
             {
-              ephemeralMessage:
-                "REMORA COORDINATOR JIT INJECTION: You have just launched subagents. You MUST simultaneously call the `schedule` tool with `DurationSeconds=\"60\"` to monitor liveness.\n" +
-                "In your public message to the user, you MUST describe the progress using the active subagent's role name (e.g. `subagent (Style Guard)`) and state that you will check back after a specific wait period. DO NOT expose technical terms like 'timer mounting' or 'schedule execution'.\n" +
-                "Exit the turn immediately after calling schedule.",
+              ephemeralMessage: formatJitInjection(),
             },
           ],
         };
@@ -333,6 +333,24 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
             };
           }
         } else {
+          // Blast radius check — once per turn for non-subagent commands
+          if (!isSub) {
+            const blastDone = getHookState(convId, currentTurnIdx, "blast_radius");
+            if (!blastDone) {
+              setHookState(convId, currentTurnIdx, "blast_radius", "1");
+              return {
+                decision: "allow",
+                injectSteps: [{
+                  ephemeralMessage:
+                    "BLAST RADIUS CHECK:\n" +
+                    "- Does this command affect only your workspace, or shared state?\n" +
+                    "- If it goes wrong, can you undo it?\n" +
+                    "- Do NOT use --no-verify, --force, or rm -rf to bypass problems.\n" +
+                    "- If \"shared\" or \"irreversible\", delegate to a subagent with Workspace: branch.",
+                }],
+              };
+            }
+          }
           return { decision: "allow" };
         }
       }
