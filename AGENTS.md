@@ -251,6 +251,8 @@ When running parallel subagents that edit the same test files, later subagents c
 |-------|---------|--------|
 | 58 | Core extraction (Python hooks → core) | ✅ committed |
 | 59 | Core → TypeScript (25 modules + 17 tests) | ✅ committed |
-| 60 | Adapter rewrite (29 src + 17 test files, 754 pass) | ✅ complete |
-| 98 | Optimizations & SQLite strategy | PENDING |
+| 60 | Adapter rewrite (29 src + 17 test files, 755 pass) | ✅ committed |
+| 61 | Hook entrypoint switch + prompt injection + agent hardening | ✅ committed |
+| 62 | Python removal — TypeScript is the sole source | ✅ committed |
+| 98 | Optimizations & SQLite strategy | ✅ all resolved |
 | 99 | OpenCode adapter | PENDING |

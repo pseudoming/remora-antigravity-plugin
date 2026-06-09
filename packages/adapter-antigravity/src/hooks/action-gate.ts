@@ -277,8 +277,10 @@ export function _main(context: Record<string, any>): { injectSteps: any[]; termi
     }
   } else {
     // No phantom — model actually wrote what it claimed. One-time truth check per turn.
+    // Skip if model already demonstrated truthful reporting in its own words.
     const truthDone = getHookState(convId, currentTurnIdx, "truth_check");
-    if (!truthDone && hasAnyToolCalls) {
+    const alreadySaid = /(?:actually wrote|files? (?:created|modified|changed)|skipped|error occurred)/i.test(plannerText);
+    if (!truthDone && hasAnyToolCalls && !alreadySaid) {
       setHookState(convId, currentTurnIdx, "truth_check", "1");
       return {
         injectSteps: [{

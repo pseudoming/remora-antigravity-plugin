@@ -333,22 +333,28 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
             };
           }
         } else {
-          // Blast radius check — once per turn for non-subagent commands
+          // Blast radius check — once per turn for non-subagent commands.
+          // Skip if model already demonstrated safe execution awareness,
+          // or if base system prompt (Claude Code) already covers this.
           if (!isSub) {
             const blastDone = getHookState(convId, currentTurnIdx, "blast_radius");
             if (!blastDone) {
-              setHookState(convId, currentTurnIdx, "blast_radius", "1");
-              return {
-                decision: "allow",
-                injectSteps: [{
-                  ephemeralMessage:
-                    "BLAST RADIUS CHECK:\n" +
-                    "- Does this command affect only your workspace, or shared state?\n" +
-                    "- If it goes wrong, can you undo it?\n" +
-                    "- Do NOT use --no-verify, --force, or rm -rf to bypass problems.\n" +
-                    "- If \"shared\" or \"irreversible\", delegate to a subagent with Workspace: branch.",
-                }],
-              };
+              const latestResp = cdal.getLatestPlannerResponse() ?? "";
+              const alreadyAware = /(?:blast radius|reversible|undo|shared state|no-?verify|force push|irreversible)/i.test(latestResp);
+              if (!alreadyAware) {
+                setHookState(convId, currentTurnIdx, "blast_radius", "1");
+                return {
+                  decision: "allow",
+                  injectSteps: [{
+                    ephemeralMessage:
+                      "BLAST RADIUS CHECK:\n" +
+                      "- Does this command affect only your workspace, or shared state?\n" +
+                      "- If it goes wrong, can you undo it?\n" +
+                      "- Do NOT use --no-verify, --force, or rm -rf to bypass problems.\n" +
+                      "- If \"shared\" or \"irreversible\", delegate to a subagent with Workspace: branch.",
+                  }],
+                };
+              }
             }
           }
           return { decision: "allow" };
