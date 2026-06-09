@@ -9,32 +9,23 @@ Remora — an Antigravity cognitive architecture plugin. Fully automated memory 
 ### Layers
 
 ```
-scripts/
-├── core/          ← Portable core (zero Antigravity dependencies)
-│   ├── storage/   ← SQLite DAO (10 modules: sessions, topics, decisions, recall, etc.)
-│   ├── rules/     ← Command safety inspection engine (inspector)
-│   ├── liveness.py, phantom.py, injector.py, zombie.py, reader.py, coverage.py, gate.py, text_analysis.py
-│   ├── filesystem.py, logger.py
-├── adapter/       ← Antigravity binding layer
-│   ├── hooks/     ← 8 lifecycle interceptors
-│   ├── bridge/    ← CDAL, agentapi, paths, session, subagent, stats, profiler
-│   ├── cli/       ← remora-recall, remora-topic, read-session-log
-│   ├── sandbox/   ← sandbox-merge, subagent-monitor, check-subagents-liveness
-│   ├── sidecar/   ← compactor daemon (8 modules: compactor, extract_decisions, warm_storage_sync, etc.)
-│   └── maintenance/ ← GC, ghost data cleanup
-├── lib/           ← DAO re-export facade (30 lines)
-├── schema/        ← DDL + dynamic migration
-├── tests/         ← 674 tests
-└── debug/         ← tail, inspect, env
+packages/
+├── core/          @remora/core
+│   ├── src/       Pure logic (storage, rules, injection, etc.)
+│   ├── tests/     331 tests (vitest)
+├── adapter-antigravity/  @remora/antigravity-plugin
+│   ├── src/       hooks/ bridge/ sidecar/ sandbox/ cli/ debug/
+│   ├── bin/       install.js
+│   ├── tests/     424 tests (vitest)
 ```
 
 ### Data Flow
 
 ```
 Antigravity Hook triggers
-    → adapter/hooks/ (interception, mode detection, memory reload (uc=0 + uc=1 decisions), write gate + file-touch injection, safety check)
-    → adapter/sidecar/compactor/ (background LLM incremental decision extraction)
-    → core/storage/ ← lib/dao.py (unified SQLite read/write)
+    → adapter-antigravity/src/hooks/ (interception, mode detection, memory reload, write gate + file-touch injection, safety check)
+    → adapter-antigravity/src/sidecar/compactor/ (background LLM incremental decision extraction)
+    → core/src/storage/ ← @remora/core DAO (unified SQLite read/write)
 ```
 
 ## Phases
@@ -52,13 +43,22 @@ Antigravity Hook triggers
 | 52 | File-touch injection, sidecar DAO refactoring, dead code cleanup, platform extraction | ✅ |
 | 53 | Cold-start fix (uc=0+uc=1), liveness unification, core cleanup | ✅ |
 | 54 | Line C semantic conflict detection (BM25 + flash-lite), features.json gate, core/gate.py | ✅ |
+| 55 | Unified Gate System, Documentation Sync & Injection Config Consolidation | ✅ |
+| 56 | Agent Hardening & Config Sync | ✅ |
+| 57 | C1 Injection Tracking, Cross-Project Bug Fixes & SQL Determinism Audit | ✅ |
+| 58 | Core Extraction (24 functions to core, adapter slimming, Antigravity leakage remediation) | ✅ |
+| 59 | Core → TypeScript (25 modules + 17 test files, strict 1:1 translation) | ✅ |
+| 60 | Adapter Rewrite (29 src + 17 test files, 755 pass) | ✅ |
+| 61 | Hook Entrypoint Switch + Prompt Injection + Agent Hardening | ✅ |
+| 62 | Python Removal — TypeScript is the sole source | ✅ |
+| 63 | npm Installer + tsup Build Pipeline | ✅ |
 
 ## Quality Gates
 
-- `core/` forbidden from importing `adapter/` (enforced by `test_architecture.py`)
-- All DB reads/writes go through `lib/dao.py`
-- 674 tests, `pytest scripts/tests/ -q`
-- Bare `sqlite3.connect()` forbidden in `adapter/`
+- `core/` forbidden from importing `adapter-antigravity/` (enforced by `test_architecture.ts`)
+- All DB reads/writes go through `@remora/core` DAO layer
+- 755 tests, `npm test`
+- Bare `sqlite3.connect()` forbidden outside `core/src/storage/`
 
 ## Quick Start
 
@@ -66,6 +66,7 @@ Antigravity Hook triggers
 git clone https://github.com/pseudoming/remora-antigravity-plugin.git \
   ~/.gemini/config/plugins/remora-plugin
 cd ~/.gemini/config/plugins/remora-plugin
-python3 install.py
-pytest scripts/tests/ -q  # 674 tests
+npm install
+node packages/adapter-antigravity/bin/install.js
+npm test  # 755 tests
 ```

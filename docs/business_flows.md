@@ -10,7 +10,7 @@ This document details the 10 core business flows of the Remora system, covering 
 
 ### 1. PreInvocation Flow
 * **Business Description**: Before the Agent is awakened by input and begins execution, the mounted hook is invoked. It intercepts sessions, determines the current interaction mode (`strict`/`relax`/`alert`), and injects prompt context to guide the LLM.
-* **Underlying Scripts**: `{PLUGIN_ROOT}/adapter/hooks/session-guardian.py`, `{PLUGIN_ROOT}/adapter/hooks/action-gate.py`, and `{PLUGIN_ROOT}/adapter/hooks/snapshot-git.py`.
+* **Underlying Scripts**: `{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/session-guardian.ts`, `{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/action-gate.ts`, and `{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/snapshot-git.ts`.
 * **SQLite Interaction**:
   * **Tables**:
     * `session_state`: Reads and updates the current session mode (`mode`) and cold-start flag (`is_cold_start`).
@@ -52,7 +52,7 @@ sequenceDiagram
 
 ### 2. PreToolUse Flow
 * **Business Description**: When the LLM attempts to invoke any physical tool (such as `run_command`, `view_file`, `grep_search`, etc.), a security interception is triggered. It primarily performs physical sensitivity checks, file size limits, and permission isolation audits.
-* **Underlying Scripts**: `{PLUGIN_ROOT}/adapter/hooks/safety-check.py` and the auxiliary rule engine `{PLUGIN_ROOT}/core/rules/inspector.py`.
+* **Underlying Scripts**: `{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/safety-check.ts` and the auxiliary rule engine `@remora/core (inspectCommand)`.
 * **SQLite Interaction**:
   * **Tables**: `session_state` (queries the session `mode` to determine whether strict or relaxed limits apply).
 * **API Interaction Logic**:
@@ -98,7 +98,7 @@ flowchart TD
 
 ### 2.1 cognitive-push PreToolUse Sub-Flow
 * **Business Description**: A secondary PreToolUse interceptor that augments LLM context with file-touch and semantic conflict awareness when write operations occur.
-* **Underlying Scripts**: `{PLUGIN_ROOT}/adapter/hooks/cognitive-push.py`.
+* **Underlying Scripts**: `{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/cognitive-push.ts`.
 * **SQLite Interaction**:
   * **Tables**: `topic_decisions` (reads decisions via `get_decisions_by_file`), `project_topics`, `artifacts` (for semantic conflict scan).
   * **Configuration**: Gated by `{PLUGIN_ROOT}/conf/features.json`.
@@ -112,7 +112,7 @@ flowchart TD
 
 ### 3. Stop Flow
 * **Business Description**: Executed when the Agent finishes running and transitions to offline/stopped state. It asynchronously harvests artifacts, incrementally imports newly modified Markdown documents into warm storage, and resets the session counter.
-* **Underlying Scripts**: `{PLUGIN_ROOT}/scripts/adapter/sidecar/compactor/compactor.py` (with `--event-driven` flag) and `{PLUGIN_ROOT}/adapter/maintenance/clean-session-stats.py`.
+* **Underlying Scripts**: `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sidecar/compactor/compactor.ts` (with `--event-driven` flag) and `{PLUGIN_ROOT}/packages/adapter-antigravity/src/maintenance/clean-session-stats.ts`.
 * **SQLite Interaction**:
   * **Tables**:
     * `artifact_hashes`: Saves and overwrites MD5 hashes of extracted artifacts to support incremental comparison.
@@ -159,7 +159,7 @@ sequenceDiagram
 
 ### 4. Subagent Heartbeat / Liveness Detection Flow
 * **Business Description**: Real-time auditing of subagent execution states spawned by the main agent. When a subagent is stuck or has timed out without updating its heartbeat, it intercepts and provides self-healing retry suggestions to prevent the main agent from timing out due to unresponsiveness.
-* **Underlying Scripts**: `{PLUGIN_ROOT}/adapter/sandbox/check-subagents-liveness.py`, `{PLUGIN_ROOT}/adapter/sandbox/subagent-monitor.py`, and `{PLUGIN_ROOT}/core/liveness.py` (providing `judge_zombie` and `suggest_zombie_action`).
+* **Underlying Scripts**: `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/check-subagents-liveness.ts`, `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/subagent-monitor.ts`, and `@remora/core (liveness)` (providing `judge_zombie` and `suggest_zombie_action`).
 * **SQLite Interaction**:
   * **Tables**: `messages` (inspects system messages and error output between the subagent and parent agent).
 * **API Interaction Logic**:
@@ -203,7 +203,7 @@ flowchart TD
 
 ### 5. Zombie Process Detection & Self-Healing Flow
 * **Business Description**: When the LLM uses `run_command` to execute background tasks, this flow automatically scans for unmanaged or stuck spawned background processes (e.g., un-exited Node.js, Python processes) and forces the LLM to clean them up, ensuring system physical security.
-* **Underlying Scripts**: `{PLUGIN_ROOT}/adapter/hooks/zombie-detector.py`.
+* **Underlying Scripts**: `{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/zombie-detector.ts`.
 * **SQLite Interaction**: None.
 * **API Interaction Logic**:
   * Injects an `ephemeralMessage` warning during the `PreInvocation` phase.
@@ -242,7 +242,7 @@ flowchart TD
 
 ### 6. Session / Topic Garbage Collection Flow
 * **Business Description**: Automatically runs during Compactor background daemon periodic polling, responsible for cleaning up expired, inactive, or user-unconfirmed auto-generated topics and session facts, controlling warm storage database size.
-* **Underlying Scripts**: `{PLUGIN_ROOT}/scripts/adapter/sidecar/compactor/compactor.py` (in daemon mode), specifically comprising `{PLUGIN_ROOT}/adapter/maintenance/session_gc.py` and `{PLUGIN_ROOT}/adapter/maintenance/topic_gc.py`.
+* **Underlying Scripts**: `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sidecar/compactor/compactor.ts` (in daemon mode), specifically comprising `{PLUGIN_ROOT}/packages/adapter-antigravity/src/maintenance/session-gc.ts` and `{PLUGIN_ROOT}/packages/adapter-antigravity/src/maintenance/topic-gc.ts`.
 * **SQLite Interaction**:
   * **Tables**:
     * `project_topics`: Physical `DELETE`.
@@ -290,7 +290,7 @@ sequenceDiagram
 
 ### 7. Database Schema Initialization / Migration Flow
 * **Business Description**: Automatically triggers table creation and migration upon project deployment, plugin installation via `install.py`, or database schema upgrades.
-* **Underlying Scripts**: `{PLUGIN_ROOT}/scripts/schema/schema_init.py` and the schema declaration script `{PLUGIN_ROOT}/scripts/schema/schema.sql`.
+* **Underlying Scripts**: `{PLUGIN_ROOT}/packages/adapter-antigravity/src/schema/schema-init.ts` and the schema declaration script `{PLUGIN_ROOT}/packages/adapter-antigravity/src/schema/schema.sql`.
 * **SQLite Interaction**:
   * **Tables**: Creates or modifies 9 core entity tables and virtual tables.
   * **Triggers**: Automatically creates FTS5-related `messages_ai` (insert sync) and `messages_ad` (delete sync) triggers.
@@ -328,7 +328,7 @@ flowchart TD
 
 ### 8. History Recall / Retrieval Flow
 * **Business Description**: When the LLM or system needs to retrieve historical experience and architectural decisions, implements a hybrid recall based on three channels (FTS5 forward, decision reverse tracing, LIKE fuzzy matching).
-* **Underlying Scripts**: CLI recall tool `{PLUGIN_ROOT}/adapter/cli/remora-recall.py` and the underlying `{PLUGIN_ROOT}/lib/dao.py`.
+* **Underlying Scripts**: CLI recall tool `{PLUGIN_ROOT}/packages/adapter-antigravity/src/cli/remora-recall.ts` and the underlying `@remora/core`.
 * **SQLite Interaction**:
   * **Tables**: `messages` (reads plaintext data), `messages_fts` (uses trigram for MATCH full-text search), `topic_decisions` (extracts decision content and evidence source text), `project_topics` (updates the last-accessed time of touched topics).
   * **Full-Text Index Query**: `JOIN messages_fts fts ON m.id = fts.rowid WHERE fts.content MATCH ...`
@@ -371,7 +371,7 @@ flowchart TD
 
 ### 9. Active Topic Management Flow
 * **Business Description**: During LLM-driven development, allows explicit tool-based management of the current development topic (Topic), supporting creation, one-click active state switching, archival, as well as final physical confirmation of decisions and multi-sandbox code merging.
-* **Underlying Scripts**: Topic management tool `{PLUGIN_ROOT}/adapter/cli/remora-topic.py` and `{PLUGIN_ROOT}/adapter/sandbox/sandbox-merge.py`.
+* **Underlying Scripts**: Topic management tool `{PLUGIN_ROOT}/packages/adapter-antigravity/src/cli/remora-topic.ts` and `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/sandbox-merge.ts`.
 * **SQLite Interaction**:
   * **Tables**:
     * `project_topics`: Creates, closes, and modifies physically associated files.
@@ -379,7 +379,7 @@ flowchart TD
     * `session_state`: Sets the cold-start flag `is_cold_start=1`, signaling the hook to perform an environment reload on the next request.
 * **API Interaction Logic**:
   * Supports CLI actions: `new`, `switch`, `close`, `confirm`.
-  * Invokes the subprocess `{PLUGIN_ROOT}/adapter/sandbox/sandbox-merge.py <subagent_id>` to handle physical code changes produced by isolated agents and perform Git-level automatic merging.
+  * Invokes the subprocess `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/sandbox-merge.ts <subagent_id>` to handle physical code changes produced by isolated agents and perform Git-level automatic merging.
 * **Detailed Steps**:
   1. **Create (`new`)**: Calls `create_or_update_topic`, inserts a topic record with `status='open'` and `source='manual'` in `project_topics`, and sets `is_cold_start` to 1 in `session_state`.
   2. **Switch (`switch`)**: Sets all other topics under the project to `closed`, updates the target topic as the sole `open` state, and writes the cold-start signal.
@@ -387,7 +387,7 @@ flowchart TD
   4. **Confirm & Sandbox Physical Merge (`confirm`)**:
      * Updates the `user_confirmed` flag to 1 for the specified `decision_id`.
      * Promotes the associated topic to `manual` level.
-     * Runs the subprocess `{PLUGIN_ROOT}/adapter/sandbox/sandbox-merge.py <subagent_id>`:
+     * Runs the subprocess `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/sandbox-merge.ts <subagent_id>`:
        1. Extracts the temporary branch name from the subagent's worktree.
        2. Computes the list of files physically modified by the subagent in its isolated sandbox (`git diff --name-only`).
        3. Executes `git merge` to perform conflict-free merging of the isolated branch code.
@@ -411,7 +411,7 @@ flowchart TD
 
 ### 10. Ghost Record Periodic Cleanup Flow
 * **Business Description**: Cleans up "ghost records" — records with empty `role` or `content` fields that may arise from extreme edge cases such as network disconnections or abnormal session termination — ensuring FTS full-text index search quality and retrieval accuracy.
-* **Underlying Scripts**: Maintenance script `{PLUGIN_ROOT}/adapter/maintenance/cleanup_ghost_records.py`.
+* **Underlying Scripts**: Maintenance script `{PLUGIN_ROOT}/packages/adapter-antigravity/src/maintenance/cleanup-ghost-records.ts`.
 * **SQLite Interaction**:
   * **Tables**: `messages` (searches for and physically deletes rows with empty role/content fields).
   * **FTS5 Maintenance**: Invokes the SQLite FTS5 rebuild command: `INSERT INTO messages_fts(messages_fts) VALUES('rebuild')` to forcefully rebuild the full-text index.
@@ -448,7 +448,7 @@ sequenceDiagram
 
 ## 4. Core Background Compactor Service Integration Mechanism
 
-The major flows described above are ultimately integrated and driven through `{PLUGIN_ROOT}/scripts/adapter/sidecar/compactor/compactor.py`.
+The major flows described above are ultimately integrated and driven through `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sidecar/compactor/compactor.ts`.
 In **Daemon background-mount** mode, the Compactor's business chain runs in the following streaming steps:
 
 ```mermaid

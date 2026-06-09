@@ -4,7 +4,7 @@
 
 **[Trading Compute for Cognitive Safety] — Deterministic rules guard the probabilistic core, so AI Agents never forget**
 
-![Platform](https://img.shields.io/badge/platform-Antigravity-blue) ![Tests](https://img.shields.io/badge/tests-674%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Antigravity-blue) ![Tests](https://img.shields.io/badge/tests-755%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -78,13 +78,7 @@ Spending an extra 1M tokens on memory management (≈ $0.10) to avoid 1h of rewo
 git clone https://github.com/pseudoming/remora-antigravity-plugin.git \
   ~/.gemini/config/plugins/remora-plugin
 cd ~/.gemini/config/plugins/remora-plugin
-python3 install.py              # Install
-```
-
-```bash
-python3 install.py --dry-run    # Preview (no writes)
-python3 install.py --force      # Reinstall (skip idempotent check)
-python3 install.py --uninstall  # Uninstall
+npm install -g @remora/antigravity-plugin && remora-install
 ```
 
 ```bash
@@ -97,17 +91,17 @@ export REMORA_LOG_LEVEL=DEBUG                      # DEBUG | INFO | WARN | ERROR
 ## CLI Tools
 
 ```bash
-python3 scripts/adapter/cli/remora-recall.py "<keywords>"          # Recall historical architecture decisions
-python3 scripts/adapter/cli/remora-topic.py new|switch|close|confirm  # Topic management
-python3 scripts/adapter/cli/read-session-log.py <conv_id> [rounds]    # Read session logs
+npx tsx packages/adapter-antigravity/src/cli/remora-recall.ts "<keywords>"          # Recall historical architecture decisions
+npx tsx packages/adapter-antigravity/src/cli/remora-topic.ts new|switch|close|confirm  # Topic management
+npx tsx packages/adapter-antigravity/src/cli/read-session-log.ts <conv_id> [rounds]    # Read session logs
 ```
 
 ### Debugging
 
 ```bash
-python3 scripts/debug/tail.py    # Real-time log viewer
-python3 scripts/debug/inspect.py # Database status inspection
-python3 scripts/debug/env.py     # System environment info
+npx tsx packages/adapter-antigravity/src/debug/tail.ts    # Real-time log viewer
+npx tsx packages/adapter-antigravity/src/debug/inspect.ts # Database status inspection
+npx tsx packages/adapter-antigravity/src/debug/env.ts     # System environment info
 ```
 
 ---
@@ -160,16 +154,22 @@ python3 scripts/debug/env.py     # System environment info
 ```
 
 ```
-scripts/
-├── core/          ← Portable core (zero AG dependencies)
-│   ├── storage/   ← SQLite DAO — 10 modules
-│   ├── rules/     ← Command safety audit engine
-│   └── logger.py  ← Unified logging: 4 levels, trace ID, daily rotation
-├── adapter/       ← Antigravity binding layer — hooks/, bridge/, cli/, sandbox/, maintenance/
-├── lib/           ← DAO re-export facade
-├── schema/        ← DDL + dynamic migration
-├── tests/         ← 674 tests
-└── debug/         ← tail.py, inspect.py, env.py
+packages/
+├── core/               ← Portable core (zero AG dependencies)
+│   ├── src/storage/    ← SQLite DAO — 11 modules
+│   ├── src/rules/      ← Command safety audit engine
+│   ├── schema/         ← DDL + dynamic migration
+│   ├── conf/           ← Configuration
+│   └── tests/          ← 331 tests
+├── adapter-antigravity/ ← Antigravity binding layer
+│   ├── src/hooks/      ← Lifecycle hooks
+│   ├── src/bridge/     ← Agent API bridge
+│   ├── src/cli/        ← CLI tools
+│   ├── src/debug/      ← Debug tools
+│   ├── src/sandbox/    ← Sandbox
+│   ├── src/sidecar/    ← Sidecar daemons
+│   ├── src/maintenance/ ← Maintenance
+│   └── tests/          ← 424 tests
 ```
 
 ---
@@ -178,19 +178,20 @@ scripts/
 
 ```bash
 # Run tests
-pytest scripts/tests/ -q                         # 674 tests
+cd packages/core && npm test                    # 331 core tests
+cd packages/adapter-antigravity && npm test     # 424 adapter tests
 
 # Add a new Hook
-1. Write a script using the @hook_entrypoint decorator
+1. Write a TypeScript hook module in packages/adapter-antigravity/src/hooks/
 2. Edit conf/templates/hooks.template.json
-3. Run python3 install.py
+3. Run remora-install
 ```
 
 **Architecture Boundaries**
 
-- `core/` must not import from `adapter/` (enforced by `test_architecture.py`)
-- All database reads/writes go through the `lib/dao.py` unified entry point
-- Source code must not hardcode absolute paths; use `find_plugin_root()`, environment variables, or `get_data_dir()`
+- `core/` must not import from `adapter-antigravity/` (enforced by `test_architecture.ts`)
+- All database reads/writes go through `packages/core/src/dao.ts` unified entry point
+- Source code must not hardcode absolute paths; use `findPluginRoot()`, environment variables, or `getDataDir()`
 
 ---
 
@@ -203,7 +204,7 @@ PRs welcome, especially for:
 - New CLI management tools
 - New Sidecar daemons
 
-Ensure `pytest scripts/tests/ -q` is all green before submitting.
+Ensure both npm test suites are all green before submitting.
 
 ---
 
@@ -215,4 +216,4 @@ Ensure `pytest scripts/tests/ -q` is all green before submitting.
 | [Core Business Flows](docs/business_flows.md) | 10 flows + Mermaid diagrams |
 | [Antigravity Integration](.agents/skills/antigravity-integration/SKILL.md) | Hook / Sidecar / Plugin protocol |
 | [Memory Mechanics](.agents/skills/antigravity-memory-mechanics/SKILL.md) | Checkpoint / Compaction / SQLite warm storage |
-| [Debug Tools](scripts/debug/README.md) | tail / inspect / env |
+| [Debug Tools](packages/adapter-antigravity/src/debug/README.md) | tail / inspect / env |

@@ -10,7 +10,7 @@
 
 ### 1. PreInvocation 流程
 * **业务描述**：在 Agent 被输入唤醒并开始执行前，挂载的钩子被调用。用于拦截会话、判定当前的交互模式（`strict`/`relax`/`alert`）并注入提示词上下文以引导大模型。
-* **底层脚本**：`{PLUGIN_ROOT}/adapter/hooks/session-guardian.py`、`{PLUGIN_ROOT}/adapter/hooks/action-gate.py` 与 `{PLUGIN_ROOT}/adapter/hooks/snapshot-git.py`。
+* **底层脚本**：`{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/session-guardian.ts`、`{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/action-gate.ts` 与 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/snapshot-git.ts`。
 * **SQLite 交互**：
   * **表**：
     * `session_state`：读取和更新当前会话模式（`mode`）和冷启动标记（`is_cold_start`）。
@@ -52,7 +52,7 @@ sequenceDiagram
 
 ### 2. PreToolUse 流程
 * **业务描述**：当大模型试图调用任何物理工具（如 `run_command`、`view_file`、`grep_search` 等）前，触发安全拦截。主要执行物理敏感度、文件大小限制和权限隔离审计。
-* **底层脚本**：`{PLUGIN_ROOT}/adapter/hooks/safety-check.py` 与辅助规则库 `{PLUGIN_ROOT}/core/rules/inspector.py`。
+* **底层脚本**：`{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/safety-check.ts` 与辅助规则库 `@remora/core (inspectCommand)`。
 * **SQLite 交互**：
   * **表**：`session_state`（查询会话的 `mode` 以判断是启用严格限制还是宽松限制）。
 * **API 交互逻辑**：
@@ -98,7 +98,7 @@ flowchart TD
 
 ### 2.1 cognitive-push PreToolUse 子流程
 * **业务描述**：一个次级 PreToolUse 拦截器，当写入操作发生时，为 LLM 上下文注入文件触碰和语义冲突感知。
-* **底层脚本**：`{PLUGIN_ROOT}/adapter/hooks/cognitive-push.py`。
+* **底层脚本**：`{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/cognitive-push.ts`。
 * **SQLite 交互**：
   * **表**：`topic_decisions`（通过 `get_decisions_by_file` 读取决策）、`project_topics`、`artifacts`（用于语义冲突扫描）。
   * **配置开关**：由 `{PLUGIN_ROOT}/conf/features.json` 控制。
@@ -112,7 +112,7 @@ flowchart TD
 
 ### 3. Stop 流程
 * **业务描述**：当 Agent 运行结束并退回离线状态时执行。用于异步搜刮制品，将新修改的 Markdown 文档增量导入温存储，并重置会话计数器。
-* **底层脚本**：`{PLUGIN_ROOT}/scripts/adapter/sidecar/compactor/compactor.py`（带 `--event-driven` 参数）与 `{PLUGIN_ROOT}/adapter/maintenance/clean-session-stats.py`。
+* **底层脚本**：`{PLUGIN_ROOT}/packages/adapter-antigravity/src/sidecar/compactor/compactor.ts`（带 `--event-driven` 参数）与 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/maintenance/clean-session-stats.ts`。
 * **SQLite 交互**：
   * **表**：
     * `artifact_hashes`：保存和覆盖被提取制品的 MD5 哈希以支持增量比较。
@@ -159,7 +159,7 @@ sequenceDiagram
 
 ### 4. 子特工心跳/活体检测流程
 * **业务描述**：实时审计由主特工派生的子特工（Subagents）执行状态，当子特工卡死或超时未更新心跳时，进行拦截并提供自愈重试建议，防止主特工无响应超时。
-* **底层脚本**：`{PLUGIN_ROOT}/adapter/sandbox/check-subagents-liveness.py`、`{PLUGIN_ROOT}/adapter/sandbox/subagent-monitor.py` 与 `{PLUGIN_ROOT}/core/liveness.py`（提供 `judge_zombie` 和 `suggest_zombie_action`）。
+* **底层脚本**：`{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/check-subagents-liveness.ts`、`{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/subagent-monitor.ts` 与 `@remora/core (liveness)`（提供 `judge_zombie` 和 `suggest_zombie_action`）。
 * **SQLite 交互**：
   * **表**：`messages`（检测子特工和父特工之间的系统消息与错误输出）。
 * **API 交互逻辑**：
@@ -203,7 +203,7 @@ flowchart TD
 
 ### 5. 僵尸进程检测与自愈流程
 * **业务描述**：当大模型使用 `run_command` 执行后台任务时，该流程自动扫描未托管或卡死的衍生后台进程（如未退出的 Node.js, Python 进程），强制大模型清理，确保系统物理安全。
-* **底层脚本**：`{PLUGIN_ROOT}/adapter/hooks/zombie-detector.py`。
+* **底层脚本**：`{PLUGIN_ROOT}/packages/adapter-antigravity/src/hooks/zombie-detector.ts`。
 * **SQLite 交互**：无。
 * **API 交互逻辑**：
   * 在 `PreInvocation` 阶段注入 ephemeralMessage 告警。
@@ -242,7 +242,7 @@ flowchart TD
 
 ### 6. 会话/主题垃圾回收流程
 * **业务描述**：Compactor 后台守护进程定期轮询时自动运行，负责清理超期的、不活跃的或无用户确认的自动生成话题和会话事实，控制温存储数据库的体积。
-* **底层脚本**：`{PLUGIN_ROOT}/scripts/adapter/sidecar/compactor/compactor.py`（在守护进程模式下），具体包含 `{PLUGIN_ROOT}/adapter/maintenance/session_gc.py` 与 `{PLUGIN_ROOT}/adapter/maintenance/topic_gc.py`。
+* **底层脚本**：`{PLUGIN_ROOT}/packages/adapter-antigravity/src/sidecar/compactor/compactor.ts`（在守护进程模式下），具体包含 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/maintenance/session-gc.ts` 与 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/maintenance/topic-gc.ts`。
 * **SQLite 交互**：
   * **表**：
     * `project_topics`：物理级 `DELETE`。
@@ -290,7 +290,7 @@ sequenceDiagram
 
 ### 7. 数据库结构初始化/迁移流程
 * **业务描述**：在项目部署、通过 `install.py` 安装插件或数据库结构升级时，自动触发库表建制和迁移。
-* **底层脚本**：`{PLUGIN_ROOT}/scripts/schema/schema_init.py` 与表结构声明脚本 `{PLUGIN_ROOT}/scripts/schema/schema.sql`。
+* **底层脚本**：`{PLUGIN_ROOT}/packages/adapter-antigravity/src/schema/schema-init.ts` 与表结构声明脚本 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/schema/schema.sql`。
 * **SQLite 交互**：
   * **表**：创建或修改 9 张核心实体表及虚拟表。
   * **触发器**：自动创建 FTS5 相关的 `messages_ai`（插入同步）和 `messages_ad`（删除同步）触发器。
@@ -328,7 +328,7 @@ flowchart TD
 
 ### 8. 历史回忆召回流程
 * **业务描述**：当大模型或系统需要检索历史经验与架构决策时，实现基于三通道（FTS5 正向、决策反向牵引、LIKE 模糊匹配）的混合召回。
-* **底层脚本**：命令行回忆工具 `{PLUGIN_ROOT}/adapter/cli/remora-recall.py` 及底层 `{PLUGIN_ROOT}/lib/dao.py`。
+* **底层脚本**：命令行回忆工具 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/cli/remora-recall.ts` 及底层 `@remora/core`。
 * **SQLite 交互**：
   * **表**：`messages`（读取明文数据）、`messages_fts`（利用 trigram 做 MATCH 全文检索）、`topic_decisions`（提取决策内容与证据原文）、`project_topics`（更新被触碰的活跃时间）。
   * **全文索引查询**：`JOIN messages_fts fts ON m.id = fts.rowid WHERE fts.content MATCH ...`
@@ -371,7 +371,7 @@ flowchart TD
 
 ### 9. 活跃主题管理流程
 * **业务描述**：在大模型开发过程中，允许通过工具显式地管理当前开发的主题（Topic），支持新建、一键式活跃状态切换、归档以及对决策的最终物理确认与多沙箱代码合并。
-* **底层脚本**：主题管理工具 `{PLUGIN_ROOT}/adapter/cli/remora-topic.py` 与 `{PLUGIN_ROOT}/adapter/sandbox/sandbox-merge.py`。
+* **底层脚本**：主题管理工具 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/cli/remora-topic.ts` 与 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/sandbox-merge.ts`。
 * **SQLite 交互**：
   * **表**：
     * `project_topics`：创建、关闭与修改物理关联文件。
@@ -379,7 +379,7 @@ flowchart TD
     * `session_state`：置冷启动标记 `is_cold_start=1` 信号，告知拦截器下一次请求执行环境重载。
 * **API 交互逻辑**：
   * 支持 CLI 动作：`new`、`switch`、`close`、`confirm`。
-  * 调用子进程执行 `{PLUGIN_ROOT}/adapter/sandbox/sandbox-merge.py <subagent_id>` 来处理被分离特工产生的物理代码变更，并执行 Git 级自动合并。
+  * 调用子进程执行 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/sandbox-merge.ts <subagent_id>` 来处理被分离特工产生的物理代码变更，并执行 Git 级自动合并。
 * **详细步骤**：
   1. **新建 (`new`)**：调用 `create_or_update_topic`，在 `project_topics` 插入状态为 `open`、来源 `source='manual'` 的主题记录，并将 `session_state` 中的 `is_cold_start` 设为 1。
   2. **切换 (`switch`)**：将本项目下的其他话题置为 `closed`，把目标主题更新为唯一的 `open` 状态，写入冷启动信号。
@@ -387,7 +387,7 @@ flowchart TD
   4. **确认打标并沙箱物理合并 (`confirm`)**：
      * 更新指定 `decision_id` 对应的 `user_confirmed` 标记为 1。
      * 将关联话题提升为 `manual` 级别。
-     * 运行子进程 `{PLUGIN_ROOT}/adapter/sandbox/sandbox-merge.py <subagent_id>`：
+     * 运行子进程 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sandbox/sandbox-merge.ts <subagent_id>`：
        1. 提取子特工工作树所在临时分支名。
        2. 计算该子特工在独立沙箱中实际物理修改的文件列表（`git diff --name-only`）。
        3. 执行 `git merge` 无冲突合并该隔离分支代码。
@@ -411,7 +411,7 @@ flowchart TD
 
 ### 10. 脏数据定期清洗流程
 * **业务描述**：清除由于网络断连、会话异常终止等极端边界情况下可能产生的 role 或 content 为空的 "幽灵记录" (Ghost Records)，保证 FTS 全文索引的搜索质量与检索正确率。
-* **底层脚本**：维护脚本 `{PLUGIN_ROOT}/adapter/maintenance/cleanup_ghost_records.py`。
+* **底层脚本**：维护脚本 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/maintenance/cleanup-ghost-records.ts`。
 * **SQLite 交互**：
   * **表**：`messages`（检索并物理删除 role/content 字段为空的数据）。
   * **FTS5 维护**：调用 SQLite FTS5 重建命令：`INSERT INTO messages_fts(messages_fts) VALUES('rebuild')` 强制重构全文索引。
@@ -448,7 +448,7 @@ sequenceDiagram
 
 ## 四、 核心后台 Compactor 服务集成机制
 
-上面介绍的各大流程，最终通过 `{PLUGIN_ROOT}/scripts/adapter/sidecar/compactor/compactor.py` 进行整合与驱动。
+上面介绍的各大流程，最终通过 `{PLUGIN_ROOT}/packages/adapter-antigravity/src/sidecar/compactor/compactor.ts` 进行整合与驱动。
 在 **Daemon 后台挂载** 模式下，Compactor 的业务链按如下步骤流式运行：
 
 ```mermaid
