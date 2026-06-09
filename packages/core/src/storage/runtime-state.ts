@@ -1,11 +1,11 @@
-import Database from "better-sqlite3";
+import { getConn } from "./connection";
 
 export function getRuntimeHookValue(
-  conn: Database.Database,
   sessionId: string,
   turnIdx: number,
   key: string
 ): string | null {
+  const conn = getConn();
   try {
     const row = conn
       .prepare(
@@ -16,16 +16,18 @@ export function getRuntimeHookValue(
   } catch (e) {
     console.warn(`getRuntimeHookValue: ${e}`);
     return null;
+  } finally {
+    conn.close();
   }
 }
 
 export function setRuntimeHookValue(
-  conn: Database.Database,
   sessionId: string,
   turnIdx: number,
   key: string,
   value: string
 ): void {
+  const conn = getConn();
   try {
     conn.prepare("BEGIN EXCLUSIVE").run();
     conn
@@ -37,15 +39,17 @@ export function setRuntimeHookValue(
     conn.prepare("COMMIT").run();
   } catch (e) {
     console.warn(`setRuntimeHookValue: ${e}`);
+  } finally {
+    conn.close();
   }
 }
 
 export function deleteRuntimeHookValue(
-  conn: Database.Database,
   sessionId: string,
   turnIdx: number,
   key: string
 ): void {
+  const conn = getConn();
   try {
     conn.prepare("BEGIN EXCLUSIVE").run();
     conn
@@ -56,14 +60,16 @@ export function deleteRuntimeHookValue(
     conn.prepare("COMMIT").run();
   } catch (e) {
     console.warn(`deleteRuntimeHookValue: ${e}`);
+  } finally {
+    conn.close();
   }
 }
 
 export function trimRuntimeHookStates(
-  conn: Database.Database,
   sessionId: string,
   currentTurnIdx: number
 ): void {
+  const conn = getConn();
   try {
     conn.prepare("BEGIN EXCLUSIVE").run();
     conn
@@ -74,41 +80,39 @@ export function trimRuntimeHookStates(
     conn.prepare("COMMIT").run();
   } catch (e) {
     console.warn(`trimRuntimeHookStates: ${e}`);
+  } finally {
+    conn.close();
   }
 }
 
 export function getHookState(
-  conn: Database.Database,
   sessionId: string,
   turnIdx: number,
   key: string
 ): string | null {
-  return getRuntimeHookValue(conn, sessionId, turnIdx, key);
+  return getRuntimeHookValue(sessionId, turnIdx, key);
 }
 
 export function setHookState(
-  conn: Database.Database,
   sessionId: string,
   turnIdx: number,
   key: string,
   value: string
 ): void {
-  setRuntimeHookValue(conn, sessionId, turnIdx, key, value);
+  setRuntimeHookValue(sessionId, turnIdx, key, value);
 }
 
 export function deleteHookState(
-  conn: Database.Database,
   sessionId: string,
   turnIdx: number,
   key: string
 ): void {
-  deleteRuntimeHookValue(conn, sessionId, turnIdx, key);
+  deleteRuntimeHookValue(sessionId, turnIdx, key);
 }
 
 export function trimHookStates(
-  conn: Database.Database,
   sessionId: string,
   currentTurnIdx: number
 ): void {
-  trimRuntimeHookStates(conn, sessionId, currentTurnIdx);
+  trimRuntimeHookStates(sessionId, currentTurnIdx);
 }

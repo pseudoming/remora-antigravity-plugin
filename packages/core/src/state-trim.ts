@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import {
   getRuntimeHookValue,
   setRuntimeHookValue,
@@ -13,11 +12,10 @@ import {
  * are deleted and the last-seen marker is updated.
  */
 export function trimStaleHookStates(
-  conn: Database.Database,
   convId: string,
   currentTurnIdx: unknown
 ): void {
-  const lastSeen = getRuntimeHookValue(conn, convId, -1, "last_seen_turn");
+  const lastSeen = getRuntimeHookValue(convId, -1, "last_seen_turn");
   let shouldTrim: boolean;
 
   if (lastSeen === null) {
@@ -37,7 +35,7 @@ export function trimStaleHookStates(
     if (isNaN(trimTurn)) {
       trimTurn = 0;
     }
-    trimRuntimeHookStates(conn, convId, trimTurn);
-    setRuntimeHookValue(conn, convId, -1, "last_seen_turn", String(trimTurn));
+    trimRuntimeHookStates(convId, trimTurn);
+    setRuntimeHookValue(convId, -1, "last_seen_turn", String(trimTurn));
   }
 }

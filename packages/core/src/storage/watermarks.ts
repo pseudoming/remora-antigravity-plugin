@@ -1,6 +1,7 @@
-import Database from "better-sqlite3";
+import { getConn } from "./connection";
 
-export function getProjectUuidByConv(conn: Database.Database, sessionId: string): string | null {
+export function getProjectUuidByConv(sessionId: string): string | null {
+  const conn = getConn();
   try {
     const row = conn.prepare(
       "SELECT project_uuid FROM watermarks WHERE conversation_id=? LIMIT 1"
@@ -9,10 +10,13 @@ export function getProjectUuidByConv(conn: Database.Database, sessionId: string)
   } catch (e) {
     console.warn(`getProjectUuidByConv: ${e}`);
     return null;
+  } finally {
+    conn.close();
   }
 }
 
-export function watermarkExists(conn: Database.Database, projectUuid: string, conversationId: string): boolean {
+export function watermarkExists(projectUuid: string, conversationId: string): boolean {
+  const conn = getConn();
   try {
     const row = conn.prepare(
       "SELECT 1 FROM watermarks WHERE project_uuid=? AND conversation_id=? LIMIT 1"
@@ -21,10 +25,12 @@ export function watermarkExists(conn: Database.Database, projectUuid: string, co
   } catch (e) {
     console.warn(`watermarkExists: ${e}`);
     return false;
+  } finally {
+    conn.close();
   }
 }
 
-export function getActiveTopicCreatedAt(conn: Database.Database, projectUuid: string): string | null {
+export function getActiveTopicCreatedAt(projectUuid: string): string | null {
   const { getActiveTopicCreatedAt: impl } = require("./topics");
-  return impl(conn, projectUuid);
+  return impl(projectUuid);
 }

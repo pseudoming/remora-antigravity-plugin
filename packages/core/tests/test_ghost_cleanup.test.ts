@@ -1,5 +1,25 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import Database from "better-sqlite3";
+import * as os from "node:os";
+import * as path from "node:path";
+
+const txPath = path.join(os.tmpdir(), `test_ghost_${Date.now()}.db`);
+
+vi.mock("../src/storage/connection", () => {
+  const Database = require("better-sqlite3");
+  return {
+    getDbPath: () => txPath,
+    getConn: () => new Database(txPath, { timeout: 15000 }),
+    checkDbExists: () => {
+      try {
+        return require("node:fs").statSync(txPath).isFile();
+      } catch {
+        return false;
+      }
+    },
+  };
+});
+
 import { cleanupGhostMessages } from "../src/storage/maintenance";
 
 const SCHEMA = `
@@ -28,20 +48,27 @@ const SCHEMA = `
 `;
 
 function createTestDb(): Database.Database {
-  const db = new Database(":memory:");
-  db.exec(SCHEMA);
+  const db = new Database(txPath);
+  db.exec("DELETE FROM messages");
+  db.exec("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')");
   return db;
 }
 
 // test_fix_db_no_ghost_records
 describe("fix_db", () => {
+  beforeAll(() => {
+    const db = new Database(txPath);
+    db.exec(SCHEMA);
+    db.close();
+  });
+
   it("no ghost records", () => {
     const db = createTestDb();
     db.prepare(
       "INSERT INTO messages (conversation_id, line_number, role, content) VALUES ('conv1', 1, 'user', 'hello')"
     ).run();
 
-    const count = cleanupGhostMessages(db);
+    const count = cleanupGhostMessages();
     expect(count).toBe(0);
 
     const rows = db.prepare("SELECT * FROM messages").all();
@@ -69,7 +96,7 @@ describe("fix_db", () => {
       "INSERT INTO messages (conversation_id, line_number, role, content) VALUES ('conv1', 5, 'assistant', '')"
     ).run();
 
-    const count = cleanupGhostMessages(db);
+    const count = cleanupGhostMessages();
     expect(count).toBe(4);
 
     const rows = db.prepare("SELECT id FROM messages").all();

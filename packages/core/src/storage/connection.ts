@@ -1,11 +1,7 @@
 import Database from "better-sqlite3";
 
-const DB_PATH =
-  process.env.REMORA_DB_PATH ??
-  process.env.HOME + "/.remora/data/remora_memory.db";
-
 export function getDbPath(): string {
-  return DB_PATH;
+  return process.env.REMORA_DB_PATH ?? process.env.HOME + "/.remora/data/remora_memory.db";
 }
 
 export function getConn(): Database.Database {

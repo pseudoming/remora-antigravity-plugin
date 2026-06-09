@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { getConn } from "./connection";
 
 /** Return type for {@link getTopicsByUuid}. */
 export interface TopicRow {
@@ -13,9 +13,9 @@ export interface TopicRow {
  * Returns the topic_id of the most recently updated 'open' topic, or null.
  */
 export function getActiveTopic(
-  conn: Database.Database,
   projectUuid: string
 ): string | null {
+  const conn = getConn();
   try {
     const row = conn
       .prepare(
@@ -26,6 +26,8 @@ export function getActiveTopic(
   } catch (e) {
     console.warn(`getActiveTopic: ${e}`);
     return null;
+  } finally {
+    conn.close();
   }
 }
 
@@ -36,19 +38,23 @@ export function getActiveTopic(
  * If it does exist, set status='open' and update summary (non-empty only) and source.
  */
 export function createOrUpdateTopic(
-  conn: Database.Database,
   projectUuid: string,
   topicId: string,
   summary: string = "",
   source: string = "auto"
 ): void {
-  conn
-    .prepare(
-      `INSERT INTO project_topics (uuid, topic_id, status, summary, source, last_accessed_at)
-       VALUES (?, ?, 'open', ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(uuid, topic_id) DO UPDATE SET status='open', summary=COALESCE(NULLIF(excluded.summary, ''), summary), source=excluded.source, last_accessed_at=CURRENT_TIMESTAMP`
-    )
-    .run(projectUuid, topicId, summary, source);
+  const conn = getConn();
+  try {
+    conn
+      .prepare(
+        `INSERT INTO project_topics (uuid, topic_id, status, summary, source, last_accessed_at)
+         VALUES (?, ?, 'open', ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(uuid, topic_id) DO UPDATE SET status='open', summary=COALESCE(NULLIF(excluded.summary, ''), summary), source=excluded.source, last_accessed_at=CURRENT_TIMESTAMP`
+      )
+      .run(projectUuid, topicId, summary, source);
+  } finally {
+    conn.close();
+  }
 }
 
 /**
@@ -58,34 +64,42 @@ export function createOrUpdateTopic(
  * new_topic_id is inserted or re-opened.
  */
 export function switchTopic(
-  conn: Database.Database,
   projectUuid: string,
   newTopicId: string
 ): void {
-  conn
-    .prepare("UPDATE project_topics SET status='closed' WHERE uuid=?")
-    .run(projectUuid);
-  conn
-    .prepare(
-      `INSERT INTO project_topics (uuid, topic_id, status, last_accessed_at) VALUES (?, ?, 'open', CURRENT_TIMESTAMP)
-       ON CONFLICT(uuid, topic_id) DO UPDATE SET status='open', last_accessed_at=CURRENT_TIMESTAMP`
-    )
-    .run(projectUuid, newTopicId);
+  const conn = getConn();
+  try {
+    conn
+      .prepare("UPDATE project_topics SET status='closed' WHERE uuid=?")
+      .run(projectUuid);
+    conn
+      .prepare(
+        `INSERT INTO project_topics (uuid, topic_id, status, last_accessed_at) VALUES (?, ?, 'open', CURRENT_TIMESTAMP)
+         ON CONFLICT(uuid, topic_id) DO UPDATE SET status='open', last_accessed_at=CURRENT_TIMESTAMP`
+      )
+      .run(projectUuid, newTopicId);
+  } finally {
+    conn.close();
+  }
 }
 
 /**
  * Mark a specific topic as closed manually.
  */
 export function closeTopic(
-  conn: Database.Database,
   projectUuid: string,
   topicId: string
 ): void {
-  conn
-    .prepare(
-      "UPDATE project_topics SET status='closed', source='manual', last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?"
-    )
-    .run(projectUuid, topicId);
+  const conn = getConn();
+  try {
+    conn
+      .prepare(
+        "UPDATE project_topics SET status='closed', source='manual', last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?"
+      )
+      .run(projectUuid, topicId);
+  } finally {
+    conn.close();
+  }
 }
 
 /**
@@ -94,9 +108,9 @@ export function closeTopic(
  * Returns [{topicId, status, summary}]
  */
 export function getTopicsByUuid(
-  conn: Database.Database,
   projectUuid: string
 ): TopicRow[] {
+  const conn = getConn();
   try {
     const rows = conn
       .prepare(
@@ -115,6 +129,8 @@ export function getTopicsByUuid(
   } catch (e) {
     console.warn(`getTopicsByUuid: ${e}`);
     return [];
+  } finally {
+    conn.close();
   }
 }
 
@@ -122,15 +138,19 @@ export function getTopicsByUuid(
  * Mark a topic's source as 'manual' (user-initiated) and bump last_accessed_at.
  */
 export function touchTopicSourceManual(
-  conn: Database.Database,
   projectUuid: string,
   topicId: string
 ): void {
-  conn
-    .prepare(
-      "UPDATE project_topics SET source='manual', last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?"
-    )
-    .run(projectUuid, topicId);
+  const conn = getConn();
+  try {
+    conn
+      .prepare(
+        "UPDATE project_topics SET source='manual', last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?"
+      )
+      .run(projectUuid, topicId);
+  } finally {
+    conn.close();
+  }
 }
 
 /**
@@ -141,54 +161,58 @@ export function touchTopicSourceManual(
  * The entire operation runs inside an EXCLUSIVE transaction.
  */
 export function mergePhysicalFilesToTopic(
-  conn: Database.Database,
   projectUuid: string,
   topicId: string,
   physicalFiles: string[]
 ): void {
-  const begin = conn.prepare("BEGIN EXCLUSIVE");
-  begin.run();
+  const conn = getConn();
   try {
-    const row = conn
-      .prepare(
-        "SELECT associated_files FROM project_topics WHERE uuid=? AND topic_id=?"
-      )
-      .get(projectUuid, topicId) as
-      | { associated_files: string | null }
-      | undefined;
-    const existingAssocJson =
-      row && row.associated_files ? row.associated_files : "[]";
-    let existingAssoc: Array<{ file: string; source: string }> = [];
+    const begin = conn.prepare("BEGIN EXCLUSIVE");
+    begin.run();
     try {
-      existingAssoc = JSON.parse(existingAssocJson);
-    } catch {
-      existingAssoc = [];
-    }
-
-    const assocDict: Record<string, { file: string; source: string }> = {};
-    for (const item of existingAssoc) {
-      if (item.file) {
-        assocDict[item.file] = item;
+      const row = conn
+        .prepare(
+          "SELECT associated_files FROM project_topics WHERE uuid=? AND topic_id=?"
+        )
+        .get(projectUuid, topicId) as
+        | { associated_files: string | null }
+        | undefined;
+      const existingAssocJson =
+        row && row.associated_files ? row.associated_files : "[]";
+      let existingAssoc: Array<{ file: string; source: string }> = [];
+      try {
+        existingAssoc = JSON.parse(existingAssocJson);
+      } catch {
+        existingAssoc = [];
       }
-    }
-    for (const pf of physicalFiles) {
-      if (!(pf in assocDict)) {
-        assocDict[pf] = { file: pf, source: "physical" };
-      } else if (!assocDict[pf].source.includes("physical")) {
-        assocDict[pf].source = assocDict[pf].source + ", physical";
+
+      const assocDict: Record<string, { file: string; source: string }> = {};
+      for (const item of existingAssoc) {
+        if (item.file) {
+          assocDict[item.file] = item;
+        }
       }
+      for (const pf of physicalFiles) {
+        if (!(pf in assocDict)) {
+          assocDict[pf] = { file: pf, source: "physical" };
+        } else if (!assocDict[pf].source.includes("physical")) {
+          assocDict[pf].source = assocDict[pf].source + ", physical";
+        }
+      }
+
+      conn
+        .prepare(
+          "UPDATE project_topics SET associated_files=? WHERE uuid=? AND topic_id=?"
+        )
+        .run(JSON.stringify(Object.values(assocDict)), projectUuid, topicId);
+
+      conn.exec("COMMIT");
+    } catch (e) {
+      conn.exec("ROLLBACK");
+      throw e;
     }
-
-    conn
-      .prepare(
-        "UPDATE project_topics SET associated_files=? WHERE uuid=? AND topic_id=?"
-      )
-      .run(JSON.stringify(Object.values(assocDict)), projectUuid, topicId);
-
-    conn.exec("COMMIT");
-  } catch (e) {
-    conn.exec("ROLLBACK");
-    throw e;
+  } finally {
+    conn.close();
   }
 }
 
@@ -199,15 +223,19 @@ export function mergePhysicalFilesToTopic(
  * larger transactions.
  */
 export function getOpenTopic(
-  conn: Database.Database,
   projectUuid: string
 ): string | null {
-  const row = conn
-    .prepare(
-      "SELECT topic_id FROM project_topics WHERE uuid=? AND status='open' ORDER BY updated_at DESC LIMIT 1"
-    )
-    .get(projectUuid) as { topic_id: string } | undefined;
-  return row ? row.topic_id : null;
+  const conn = getConn();
+  try {
+    const row = conn
+      .prepare(
+        "SELECT topic_id FROM project_topics WHERE uuid=? AND status='open' ORDER BY updated_at DESC LIMIT 1"
+      )
+      .get(projectUuid) as { topic_id: string } | undefined;
+    return row ? row.topic_id : null;
+  } finally {
+    conn.close();
+  }
 }
 
 /**
@@ -217,20 +245,24 @@ export function getOpenTopic(
  * if the row or column is absent.
  */
 export function getTopicFiles(
-  conn: Database.Database,
   projectUuid: string,
   topicId: string
 ): [string | null, string | null] {
-  const row = conn
-    .prepare(
-      "SELECT associated_files, referenced_files FROM project_topics WHERE uuid=? AND topic_id=?"
-    )
-    .get(projectUuid, topicId) as
-    | { associated_files: string | null; referenced_files: string | null }
-    | undefined;
-  return row
-    ? [row.associated_files, row.referenced_files]
-    : [null, null];
+  const conn = getConn();
+  try {
+    const row = conn
+      .prepare(
+        "SELECT associated_files, referenced_files FROM project_topics WHERE uuid=? AND topic_id=?"
+      )
+      .get(projectUuid, topicId) as
+      | { associated_files: string | null; referenced_files: string | null }
+      | undefined;
+    return row
+      ? [row.associated_files, row.referenced_files]
+      : [null, null];
+  } finally {
+    conn.close();
+  }
 }
 
 /**
@@ -238,17 +270,21 @@ export function getTopicFiles(
  * and bump last_accessed_at.
  */
 export function updateTopicFiles(
-  conn: Database.Database,
   projectUuid: string,
   topicId: string,
   associatedFiles: string,
   referencedFiles: string
 ): void {
-  conn
-    .prepare(
-      "UPDATE project_topics SET associated_files=?, referenced_files=?, last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?"
-    )
-    .run(associatedFiles, referencedFiles, projectUuid, topicId);
+  const conn = getConn();
+  try {
+    conn
+      .prepare(
+        "UPDATE project_topics SET associated_files=?, referenced_files=?, last_accessed_at=CURRENT_TIMESTAMP WHERE uuid=? AND topic_id=?"
+      )
+      .run(associatedFiles, referencedFiles, projectUuid, topicId);
+  } finally {
+    conn.close();
+  }
 }
 
 /**
@@ -258,29 +294,38 @@ export function updateTopicFiles(
  * or update the existing one's summary and confidence.
  */
 export function upsertTopic(
-  conn: Database.Database,
   projectUuid: string,
   topicId: string,
   summary: string,
   confidence: number
 ): void {
-  conn
-    .prepare(
-      `INSERT INTO project_topics (uuid, topic_id, summary, compression_confidence, source)
-       VALUES (?, ?, ?, ?, 'auto')
-       ON CONFLICT(uuid, topic_id) DO UPDATE SET summary=?, compression_confidence=?`
-    )
-    .run(projectUuid, topicId, summary, confidence, summary, confidence);
+  const conn = getConn();
+  try {
+    conn
+      .prepare(
+        `INSERT INTO project_topics (uuid, topic_id, summary, compression_confidence, source)
+         VALUES (?, ?, ?, ?, 'auto')
+         ON CONFLICT(uuid, topic_id) DO UPDATE SET summary=?, compression_confidence=?`
+      )
+      .run(projectUuid, topicId, summary, confidence, summary, confidence);
+  } finally {
+    conn.close();
+  }
 }
 
 /**
  * Return all distinct project_uuids present in the project_topics table.
  */
-export function getAllProjectUuids(conn: Database.Database): string[] {
-  const rows = conn
-    .prepare("SELECT DISTINCT uuid FROM project_topics")
-    .all() as Array<{ uuid: string }>;
-  return rows.map((r) => r.uuid);
+export function getAllProjectUuids(): string[] {
+  const conn = getConn();
+  try {
+    const rows = conn
+      .prepare("SELECT DISTINCT uuid FROM project_topics")
+      .all() as Array<{ uuid: string }>;
+    return rows.map((r) => r.uuid);
+  } finally {
+    conn.close();
+  }
 }
 
 /**
@@ -289,9 +334,9 @@ export function getAllProjectUuids(conn: Database.Database): string[] {
  * Returns the ISO 8601 timestamp string, or null if no open topic exists.
  */
 export function getActiveTopicCreatedAt(
-  conn: Database.Database,
   projectUuid: string
 ): string | null {
+  const conn = getConn();
   try {
     const row = conn
       .prepare(
@@ -302,5 +347,7 @@ export function getActiveTopicCreatedAt(
   } catch (e) {
     console.warn(`getActiveTopicCreatedAt: ${e}`);
     return null;
+  } finally {
+    conn.close();
   }
 }

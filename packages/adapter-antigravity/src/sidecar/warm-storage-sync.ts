@@ -1,0 +1,140 @@
+import Database from "better-sqlite3";
+
+import {
+  getWatermark,
+  getMaxLineNumber,
+  insertMessage,
+  getMaxMessageId,
+  getMaxMessageIdUpToLine,
+  deleteMessagesAboveLine,
+  getDecisionsByConversation,
+  deleteTopicDecision,
+  getMessageTimestamp,
+  deleteDecisionsByConversationAfter,
+  deletePendingEvents,
+  updateWatermark,
+  ensureWatermark,
+  formatTimestamp,
+} from "@remora/core";
+
+import { isSubagentSession } from "./scan-sessions";
+import { ConversationDataAccessLayer } from "../bridge/conversation";
+
+const MAX_PROMPT_LENGTH = 8000;
+
+export function readIncrementalLogs(conn: Database.Database, session: Record<string, string>): [string, number, number] {
+  const isSub = isSubagentSession(session["conversationId"]);
+  const convId = session["conversationId"];
+
+  let lastMsgId = getWatermark(conn, session["projectUuid"], convId);
+
+  let lastLine = getMaxLineNumber(conn, convId);
+
+  const cdal = new ConversationDataAccessLayer(convId);
+
+  let currentLine = lastLine;
+  const newSnippets: string[] = [];
+  let totalLength = 0;
+
+  const dbMaxIdx = cdal.getMaxStepIndex();
+  let startIdx: number;
+  if (dbMaxIdx < lastLine) {
+    currentLine = 0;
+    startIdx = 0;
+  } else {
+    startIdx = lastLine + 1;
+  }
+
+  try {
+    for (const step of cdal.streamStepsForward(startIdx)) {
+      const stepIndex = step["step_index"];
+      if (stepIndex == null) {
+        continue;
+      }
+
+      currentLine = stepIndex;
+      if (currentLine > lastLine) {
+        let stepType = step["type"] || "";
+
+        if (isSub && stepType !== "USER_INPUT" && stepType !== "PLANNER_RESPONSE") {
+          continue;
+        }
+
+        const content = step["content"] || "";
+
+        let role = step["role"];
+        if (!role) {
+          role = step["source"] || "";
+        }
+        if (!role) {
+          stepType = step["type"] || "";
+          if (stepType === "USER_INPUT") {
+            role = "user";
+          } else if (stepType === "PLANNER_RESPONSE") {
+            role = "model";
+          } else {
+            role = "unknown";
+          }
+        }
+
+        const msgId = Number(insertMessage(conn, convId, currentLine,
+          formatTimestamp(step["timestamp"] || ""), role,
+          content));
+
+        if (content && (stepType === "USER_INPUT" || stepType === "PLANNER_RESPONSE")) {
+          const snippet = `[msg_${msgId}] ${content.slice(0, 500)}`;
+          if (totalLength < MAX_PROMPT_LENGTH) {
+            newSnippets.push(snippet);
+            totalLength += snippet.length;
+          }
+        }
+      }
+    }
+  } catch {
+    // pass
+  }
+
+  if (currentLine < lastLine) {
+    const targetRollbackLine = Math.max(0, currentLine - 1);
+
+    const targetMsgId = getMaxMessageIdUpToLine(conn, convId, targetRollbackLine);
+
+    deleteMessagesAboveLine(conn, convId, targetRollbackLine);
+
+    const decisions = getDecisionsByConversation(conn, convId);
+    for (const { id: decId, evidence_msg_ids: evIdsStr } of decisions) {
+      try {
+        const evIds: number[] = evIdsStr ? JSON.parse(evIdsStr) : [];
+        if (evIds.some((eid: number) => eid > targetMsgId)) {
+          deleteTopicDecision(conn, decId);
+        }
+      } catch {
+        // pass
+      }
+    }
+
+    const targetTimestamp = getMessageTimestamp(conn, targetMsgId);
+    if (targetTimestamp) {
+      deleteDecisionsByConversationAfter(conn, convId, targetTimestamp);
+    }
+
+    deletePendingEvents(conn, session["projectUuid"]);
+
+    updateWatermark(conn, session["projectUuid"], convId, targetMsgId);
+
+    console.log(`[Remora] 检测到会话 Undo 回滚，温存储已自愈水位线至 msg_id: ${targetMsgId}`);
+    lastLine = targetRollbackLine;
+    lastMsgId = targetMsgId;
+  }
+
+  let currentMsgId = getMaxMessageId(conn, convId);
+  if (!currentMsgId) {
+    currentMsgId = lastMsgId;
+  }
+
+  ensureWatermark(conn, session["projectUuid"], convId);
+
+  const keyContent = newSnippets.join("\\n");
+
+  return [keyContent, currentMsgId, lastMsgId];
+}

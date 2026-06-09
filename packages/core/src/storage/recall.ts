@@ -1,15 +1,16 @@
 import Database from "better-sqlite3";
+import { getConn } from "./connection";
 
 /**
  * 从 messages 的 FTS5 索引中召回包含指定关键词的日志片段
  */
 export function recallFts5Logs(
-  conn: Database.Database,
   projectUuid: string,
   convId: string,
   keyword: string,
   limit: number = 10,
 ): string[] {
+  const conn = getConn();
   try {
     const safeKeyword = keyword.replace(/"/g, '""');
     const rows = conn
@@ -37,6 +38,8 @@ export function recallFts5Logs(
   } catch (e) {
     console.warn(`recallFts5Logs: ${e}`);
     return [];
+  } finally {
+    conn.close();
   }
 }
 
@@ -72,11 +75,11 @@ function _buildEvidenceTexts(
  * 通过 FTS5 匹配消息中的 topic_id，召回相关决策
  */
 export function recallDecisionsByFts5Topic(
-  conn: Database.Database,
   projectUuid: string,
   convId: string,
   keyword: string,
 ): string[] {
+  const conn = getConn();
   try {
     const safeKeyword = keyword.replace(/"/g, '""');
     const rows = conn
@@ -123,6 +126,8 @@ export function recallDecisionsByFts5Topic(
   } catch (e) {
     console.warn(`recallDecisionsByFts5Topic: ${e}`);
     return [];
+  } finally {
+    conn.close();
   }
 }
 
@@ -130,12 +135,12 @@ export function recallDecisionsByFts5Topic(
  * 通过 LIKE 模糊匹配决策文本（FTS5 的降级回退方案）
  */
 export function recallDecisionsByLike(
-  conn: Database.Database,
   projectUuid: string,
   convId: string,
   keyword: string,
   limit: number = 5,
 ): string[] {
+  const conn = getConn();
   try {
     const safeKeyword = keyword
       .replace(/\\/g, "\\\\")
@@ -174,6 +179,8 @@ export function recallDecisionsByLike(
   } catch (e) {
     console.warn(`recallDecisionsByLike: ${e}`);
     return [];
+  } finally {
+    conn.close();
   }
 }
 
@@ -181,48 +188,52 @@ export function recallDecisionsByLike(
  * 更新被召回主题的 last_accessed_at 时间戳
  */
 export function touchTopicsAccessedByRecall(
-  conn: Database.Database,
   projectUuid: string,
   convId: string,
   keyword: string,
 ): void {
-  const safeKeyword = keyword.replace(/"/g, '""');
-  conn
-    .prepare(
-      `UPDATE project_topics SET last_accessed_at = CURRENT_TIMESTAMP
-       WHERE uuid = ?
-       AND topic_id IN (
-           SELECT value FROM (
-               SELECT j.value
-               FROM messages m
-               JOIN messages_fts fts ON m.id = fts.rowid
-               JOIN json_each(COALESCE(m.topic_id, '[]')) j
-               WHERE m.conversation_id IN (
-                   SELECT conversation_id FROM watermarks WHERE project_uuid = ?
-                   UNION
-                   SELECT ? WHERE ? != ''
-               )
-               AND fts.content MATCH ?
-               ORDER BY m.id ASC LIMIT 10
-           )
-           UNION
-           SELECT topic_id FROM (
-               SELECT topic_id FROM topic_decisions
-               WHERE (project_uuid = ? OR conversation_id = ?)
-               AND (decision LIKE ? ESCAPE '\\' OR rationale LIKE ? ESCAPE '\\')
-               ORDER BY created_at DESC LIMIT 5
-           )
-       )`,
-    )
-    .run(
-      projectUuid,
-      projectUuid,
-      convId,
-      convId,
-      `"${safeKeyword}"`,
-      projectUuid,
-      convId,
-      `%${safeKeyword}%`,
-      `%${safeKeyword}%`,
-    );
+  const conn = getConn();
+  try {
+    const safeKeyword = keyword.replace(/"/g, '""');
+    conn
+      .prepare(
+        `UPDATE project_topics SET last_accessed_at = CURRENT_TIMESTAMP
+         WHERE uuid = ?
+         AND topic_id IN (
+             SELECT value FROM (
+                 SELECT j.value
+                 FROM messages m
+                 JOIN messages_fts fts ON m.id = fts.rowid
+                 JOIN json_each(COALESCE(m.topic_id, '[]')) j
+                 WHERE m.conversation_id IN (
+                     SELECT conversation_id FROM watermarks WHERE project_uuid = ?
+                     UNION
+                     SELECT ? WHERE ? != ''
+                 )
+                 AND fts.content MATCH ?
+                 ORDER BY m.id ASC LIMIT 10
+             )
+             UNION
+             SELECT topic_id FROM (
+                 SELECT topic_id FROM topic_decisions
+                 WHERE (project_uuid = ? OR conversation_id = ?)
+                 AND (decision LIKE ? ESCAPE '\\' OR rationale LIKE ? ESCAPE '\\')
+                 ORDER BY created_at DESC LIMIT 5
+             )
+         )`,
+      )
+      .run(
+        projectUuid,
+        projectUuid,
+        convId,
+        convId,
+        `"${safeKeyword}"`,
+        projectUuid,
+        convId,
+        `%${safeKeyword}%`,
+        `%${safeKeyword}%`,
+      );
+  } finally {
+    conn.close();
+  }
 }

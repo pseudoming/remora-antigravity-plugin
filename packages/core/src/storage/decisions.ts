@@ -138,76 +138,90 @@ export function getTopicIdByDecision(decisionId: number): string | null {
 
 /**
  * Check if an identical decision already exists for this project+topic.
- * Uses the supplied connection for transaction consistency.
  */
 export function decisionExists(
-  conn: Database,
   projectUuid: string,
   topicId: string,
   decisionText: string
 ): boolean {
-  const row = conn
-    .prepare(
-      "SELECT id FROM topic_decisions WHERE project_uuid = ? AND topic_id = ? AND decision = ?"
-    )
-    .get(projectUuid, topicId, decisionText);
-  return row !== undefined;
+  const conn = getConn();
+  try {
+    const row = conn
+      .prepare(
+        "SELECT id FROM topic_decisions WHERE project_uuid = ? AND topic_id = ? AND decision = ?"
+      )
+      .get(projectUuid, topicId, decisionText);
+    return row !== undefined;
+  } finally {
+    conn.close();
+  }
 }
 
 /**
  * Delete all user_confirmed=0 decisions for this topic before inserting a new extraction batch.
  */
 export function supersedeUnconfirmed(
-  conn: Database,
   projectUuid: string,
   topicId: string
 ): void {
-  conn
-    .prepare(
-      "DELETE FROM topic_decisions WHERE project_uuid = ? AND topic_id = ? AND user_confirmed = 0"
-    )
-    .run(projectUuid, topicId);
+  const conn = getConn();
+  try {
+    conn
+      .prepare(
+        "DELETE FROM topic_decisions WHERE project_uuid = ? AND topic_id = ? AND user_confirmed = 0"
+      )
+      .run(projectUuid, topicId);
+  } finally {
+    conn.close();
+  }
 }
 
 /**
  * Returns list of unconfirmed decisions for event consumption.
  */
 export function getPendingDecisions(
-  conn: Database,
   projectUuid: string,
   limit: number = 30
 ): PendingDecision[] {
-  const rows = conn
-    .prepare(
-      `SELECT id, decision, rationale
-       FROM topic_decisions
-       WHERE project_uuid = ? AND user_confirmed = 0
-       ORDER BY id DESC
-       LIMIT ?`
-    )
-    .all(projectUuid, limit) as PendingDecision[];
-  return rows;
+  const conn = getConn();
+  try {
+    const rows = conn
+      .prepare(
+        `SELECT id, decision, rationale
+         FROM topic_decisions
+         WHERE project_uuid = ? AND user_confirmed = 0
+         ORDER BY id DESC
+         LIMIT ?`
+      )
+      .all(projectUuid, limit) as PendingDecision[];
+    return rows;
+  } finally {
+    conn.close();
+  }
 }
 
 /**
  * Batch-confirm decisions by their IDs.
  */
 export function confirmDecisionsByIds(
-  conn: Database,
   decisionIds: number[],
   projectUuid: string
 ): void {
-  for (const dId of decisionIds) {
-    conn
-      .prepare(
-        "UPDATE topic_decisions SET user_confirmed = 1 WHERE id = ? AND project_uuid = ?"
-      )
-      .run(dId, projectUuid);
+  const conn = getConn();
+  try {
+    for (const dId of decisionIds) {
+      conn
+        .prepare(
+          "UPDATE topic_decisions SET user_confirmed = 1 WHERE id = ? AND project_uuid = ?"
+        )
+        .run(dId, projectUuid);
+    }
+  } finally {
+    conn.close();
   }
 }
 
 export function insertDecision(
-  conn: Database,
   projectUuid: string,
   topicId: string,
   conversationId: string,
@@ -217,154 +231,180 @@ export function insertDecision(
   userConfirmed: number,
   decisionType: string
 ): void {
-  conn
-    .prepare(
-      `INSERT INTO topic_decisions
-       (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, user_confirmed, decision_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      projectUuid,
-      topicId,
-      conversationId,
-      decision,
-      rationale,
-      evidenceMsgIds,
-      userConfirmed,
-      decisionType
-    );
+  const conn = getConn();
+  try {
+    conn
+      .prepare(
+        `INSERT INTO topic_decisions
+         (project_uuid, topic_id, conversation_id, decision, rationale, evidence_msg_ids, user_confirmed, decision_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        projectUuid,
+        topicId,
+        conversationId,
+        decision,
+        rationale,
+        evidenceMsgIds,
+        userConfirmed,
+        decisionType
+      );
+  } finally {
+    conn.close();
+  }
 }
 
 export function getDecisionConfirmed(
-  conn: Database,
   decisionId: number
 ): boolean {
-  const row = conn
-    .prepare("SELECT user_confirmed FROM topic_decisions WHERE id = ?")
-    .get(decisionId) as { user_confirmed: number } | undefined;
-  return !!(row && row.user_confirmed === 1);
+  const conn = getConn();
+  try {
+    const row = conn
+      .prepare("SELECT user_confirmed FROM topic_decisions WHERE id = ?")
+      .get(decisionId) as { user_confirmed: number } | undefined;
+    return !!(row && row.user_confirmed === 1);
+  } finally {
+    conn.close();
+  }
 }
 
 export function getConfirmedDecisionIds(
-  conn: Database,
   projectUuid: string
 ): Set<number> {
-  const rows = conn
-    .prepare(
-      "SELECT id FROM topic_decisions WHERE project_uuid = ? AND user_confirmed = 1"
-    )
-    .all(projectUuid) as { id: number }[];
-  return new Set(rows.map((r) => r.id));
+  const conn = getConn();
+  try {
+    const rows = conn
+      .prepare(
+        "SELECT id FROM topic_decisions WHERE project_uuid = ? AND user_confirmed = 1"
+      )
+      .all(projectUuid) as { id: number }[];
+    return new Set(rows.map((r) => r.id));
+  } finally {
+    conn.close();
+  }
 }
 
 /**
  * Returns recent decisions (both uc=0 and uc=1) sorted by created_at DESC.
  */
 export function getRecentDecisions(
-  conn: Database,
   projectUuid: string,
   topicId: string,
   limit: number = 5
 ): RecentDecision[] {
-  const rows = conn
-    .prepare(
-      `SELECT id, decision, rationale, user_confirmed, created_at
-       FROM topic_decisions
-       WHERE project_uuid = ? AND topic_id = ?
-       ORDER BY created_at DESC
-       LIMIT ?`
-    )
-    .all(projectUuid, topicId, limit) as RecentDecision[];
-  return rows;
+  const conn = getConn();
+  try {
+    const rows = conn
+      .prepare(
+        `SELECT id, decision, rationale, user_confirmed, created_at
+         FROM topic_decisions
+         WHERE project_uuid = ? AND topic_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`
+      )
+      .all(projectUuid, topicId, limit) as RecentDecision[];
+    return rows;
+  } finally {
+    conn.close();
+  }
 }
 
 /**
  * BM25-ranked rejected/deferred decisions matching the user query, with LIKE fallback.
  */
 export function getRejectedOrDeferredByRelevance(
-  conn: Database,
   projectUuid: string,
   queryText: string,
   limit: number = 12
 ): RelevanceDecision[] {
-  const safeQuery = queryText.replace(/"/g, '""');
-
-  let candidates: RelevanceDecision[] = [];
-  let existingIds: Set<number> = new Set();
-
+  const conn = getConn();
   try {
-    const rows = conn
-      .prepare(
-        `SELECT td.id, td.decision, td.rationale, td.decision_type, td.created_at
-         FROM topic_decisions td
-         JOIN json_each(td.evidence_msg_ids) j
-         JOIN messages m ON m.id = j.value
-         JOIN messages_fts fts ON m.id = fts.rowid
-         WHERE td.project_uuid = ?
-           AND td.decision_type IN ('rejected', 'deferred')
-           AND messages_fts MATCH ?
-         ORDER BY rank
-         LIMIT ?`
-      )
-      .all(projectUuid, `"${safeQuery}"`, limit) as RelevanceDecision[];
-    candidates = rows;
-    existingIds = new Set(candidates.map((c) => c.id));
-  } catch {
-    // FTS query failed; fall through to LIKE fallback
-  }
+    const safeQuery = queryText.replace(/"/g, '""');
 
-  if (candidates.length < limit) {
-    const shortage = limit - candidates.length;
-    const likePattern = `%${safeQuery}%`;
+    let candidates: RelevanceDecision[] = [];
+    let existingIds: Set<number> = new Set();
 
     try {
-      if (existingIds.size > 0) {
-        const placeholders = Array.from(existingIds, () => "?").join(",");
-        const rows = conn
-          .prepare(
-            `SELECT id, decision, rationale, decision_type, created_at
-             FROM topic_decisions
-             WHERE project_uuid = ?
-               AND decision_type IN ('rejected','deferred')
-               AND id NOT IN (${placeholders})
-               AND (decision LIKE ? OR rationale LIKE ?)
-             LIMIT ?`
-          )
-          .all(
-            projectUuid,
-            ...existingIds,
-            likePattern,
-            likePattern,
-            shortage
-          ) as RelevanceDecision[];
-        candidates.push(...rows);
-      } else {
-        const rows = conn
-          .prepare(
-            `SELECT id, decision, rationale, decision_type, created_at
-             FROM topic_decisions
-             WHERE project_uuid = ?
-               AND decision_type IN ('rejected','deferred')
-               AND (decision LIKE ? OR rationale LIKE ?)
-             LIMIT ?`
-          )
-          .all(projectUuid, likePattern, likePattern, shortage) as RelevanceDecision[];
-        candidates.push(...rows);
-      }
+      const rows = conn
+        .prepare(
+          `SELECT td.id, td.decision, td.rationale, td.decision_type, td.created_at
+           FROM topic_decisions td
+           JOIN json_each(td.evidence_msg_ids) j
+           JOIN messages m ON m.id = j.value
+           JOIN messages_fts fts ON m.id = fts.rowid
+           WHERE td.project_uuid = ?
+             AND td.decision_type IN ('rejected', 'deferred')
+             AND messages_fts MATCH ?
+           ORDER BY rank
+           LIMIT ?`
+        )
+        .all(projectUuid, `"${safeQuery}"`, limit) as RelevanceDecision[];
+      candidates = rows;
+      existingIds = new Set(candidates.map((c) => c.id));
     } catch {
-      // LIKE fallback also failed
+      // FTS query failed; fall through to LIKE fallback
     }
-  }
 
-  return candidates;
+    if (candidates.length < limit) {
+      const shortage = limit - candidates.length;
+      const likePattern = `%${safeQuery}%`;
+
+      try {
+        if (existingIds.size > 0) {
+          const placeholders = Array.from(existingIds, () => "?").join(",");
+          const rows = conn
+            .prepare(
+              `SELECT id, decision, rationale, decision_type, created_at
+               FROM topic_decisions
+               WHERE project_uuid = ?
+                 AND decision_type IN ('rejected','deferred')
+                 AND id NOT IN (${placeholders})
+                 AND (decision LIKE ? OR rationale LIKE ?)
+               LIMIT ?`
+            )
+            .all(
+              projectUuid,
+              ...existingIds,
+              likePattern,
+              likePattern,
+              shortage
+            ) as RelevanceDecision[];
+          candidates.push(...rows);
+        } else {
+          const rows = conn
+            .prepare(
+              `SELECT id, decision, rationale, decision_type, created_at
+               FROM topic_decisions
+               WHERE project_uuid = ?
+                 AND decision_type IN ('rejected','deferred')
+                 AND (decision LIKE ? OR rationale LIKE ?)
+               LIMIT ?`
+            )
+            .all(projectUuid, likePattern, likePattern, shortage) as RelevanceDecision[];
+          candidates.push(...rows);
+        }
+      } catch {
+        // LIKE fallback also failed
+      }
+    }
+
+    return candidates;
+  } finally {
+    conn.close();
+  }
 }
 
-export function bumpInjection(conn: Database, decisionId: number): void {
-  conn
-    .prepare(
-      `UPDATE topic_decisions
-       SET injected_count = injected_count + 1, last_injected_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    )
-    .run(decisionId);
+export function bumpInjection(decisionId: number): void {
+  const conn = getConn();
+  try {
+    conn
+      .prepare(
+        `UPDATE topic_decisions
+         SET injected_count = injected_count + 1, last_injected_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      )
+      .run(decisionId);
+  } finally {
+    conn.close();
+  }
 }

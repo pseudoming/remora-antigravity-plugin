@@ -27,6 +27,7 @@ export {
   ensureWatermark,
   backfillMessageTopicIds,
   getMaxMessageIdUpToLine,
+  getLatestNonUserMessages,
 } from "./storage/messages";
 
 // Topics

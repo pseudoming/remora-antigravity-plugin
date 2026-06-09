@@ -24,4 +24,6 @@ ORIGINAL_REQUEST.md
 
 .pytest_cache/
 node_modules/
+dist/
 **/coverage/
+**/package-lock.json

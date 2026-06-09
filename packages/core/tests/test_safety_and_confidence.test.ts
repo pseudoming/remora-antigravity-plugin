@@ -115,7 +115,7 @@ describe.skip("TestFactualConfidence", () => {
     // 当 baseline 没有任何内容时，默认置信度应该为 1.0
     setUp();
     try {
-      const confidence = calculateFactualConfidence(conn, [], [], []);
+      const confidence = calculateFactualConfidence([], [], []);
       expect(confidence).toBe(1.0);
     } finally {
       tearDown();
@@ -148,7 +148,7 @@ describe.skip("TestFactualConfidence", () => {
 
       // 4. 期待 4 个元素全部覆盖，置信度为 1.0
       const confidence = calculateFactualConfidence(
-        conn, baselineFiles, baselineActions, outputTopics
+        baselineFiles, baselineActions, outputTopics
       );
       expect(confidence).toBe(1.0);
     } finally {
@@ -184,7 +184,7 @@ describe.skip("TestFactualConfidence", () => {
       // - baseline_actions: confirm:101 (覆盖, 因为 db 字段 user_confirmed=1), confirm:102 (未覆盖, 因为 user_confirmed=0) -> 1/2
       // - 总覆盖: 2 / 4 = 0.50
       const confidence = calculateFactualConfidence(
-        conn, baselineFiles, baselineActions, outputTopics
+        baselineFiles, baselineActions, outputTopics
       );
       expect(confidence).toBe(0.5);
     } finally {
@@ -215,7 +215,7 @@ describe.skip("TestFactualConfidence", () => {
       // 3. Call and check that it prints warning and returns True instead of throwing
       let threw = false;
       try {
-        const result = validateIdInheritance(conn, "p1", newTopics);
+        const result = validateIdInheritance("p1", newTopics);
         expect(result).toBe(true);
       } catch (_e) {
         threw = true;

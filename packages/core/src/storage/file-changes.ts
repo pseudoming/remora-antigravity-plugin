@@ -1,12 +1,18 @@
-import Database from "better-sqlite3";
+import { getConn } from "./connection";
 
-export function insertFileChange(conn: Database.Database, projectUuid: string, conversationId: string, fileName: string, source: string): void {
-  conn.prepare(
-    "INSERT OR IGNORE INTO file_changes (project_uuid, conversation_id, file_name, source) VALUES (?, ?, ?, ?)"
-  ).run(projectUuid, conversationId, fileName, source);
+export function insertFileChange(projectUuid: string, conversationId: string, fileName: string, source: string): void {
+  const conn = getConn();
+  try {
+    conn.prepare(
+      "INSERT OR IGNORE INTO file_changes (project_uuid, conversation_id, file_name, source) VALUES (?, ?, ?, ?)"
+    ).run(projectUuid, conversationId, fileName, source);
+  } finally {
+    conn.close();
+  }
 }
 
-export function getFilesByTopic(conn: Database.Database, projectUuid: string, topicId: string): string[] {
+export function getFilesByTopic(projectUuid: string, topicId: string): string[] {
+  const conn = getConn();
   try {
     const rows = conn.prepare(
       `SELECT DISTINCT fc.file_name FROM file_changes fc
@@ -17,10 +23,13 @@ export function getFilesByTopic(conn: Database.Database, projectUuid: string, to
   } catch (e) {
     console.warn(`getFilesByTopic: ${e}`);
     return [];
+  } finally {
+    conn.close();
   }
 }
 
-export function getDecisionsByFile(conn: Database.Database, projectUuid: string, fileName: string): Array<{ id: number; decision: string; rationale: string }> {
+export function getDecisionsByFile(projectUuid: string, fileName: string): Array<{ id: number; decision: string; rationale: string }> {
+  const conn = getConn();
   try {
     const rows = conn.prepare(
       `SELECT DISTINCT td.id, td.decision, td.rationale
@@ -33,5 +42,7 @@ export function getDecisionsByFile(conn: Database.Database, projectUuid: string,
   } catch (e) {
     console.warn(`getDecisionsByFile: ${e}`);
     return [];
+  } finally {
+    conn.close();
   }
 }

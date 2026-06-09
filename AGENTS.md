@@ -171,6 +171,52 @@ cognitive-push PreToolUse calls `get_decisions_by_file()` on write gate allow pa
 | A3 | **Binpack core**: Package `core/` as distributable binary/package for cross-platform reuse | PENDING | None — core is already clean |
 | A4 | **OpenCode adapter**: New adapter layer for opencode platform hooks | PENDING | A3 binpack |
 
+## Phase 60 Adapter Translation — Lessons Learned
+
+### Completed
+- **29 source files + 17 test files** translated 1:1 (Python → TypeScript)
+- **754 tests pass / 23 skip / 0 fail** (Python: 708 pass / 15 skip / 5 fail)
+- Core: 330 pass / 17 skip（19→20 test files, 新增 test_architecture.ts）
+- Adapter: 420 pass / 6 skip（17 test files）
+- Stub 清零, 全部 67 个 Python 源文件有对应 TS 文件
+
+### Subagent Translation Prompt Evolution
+| Version | Used for | Key lessons |
+|---------|----------|-------------|
+| v1 | hooks/ (7 files) | 14 fixes: phantom `../bridge/dao`, `@remora/core/dist/...`, connection leaks |
+| v2 | bridge/ (10 files) | 1 fix: subagent.ts inlined `getMetadata` instead of importing from agentapi — added precise import table |
+| v3 | sidecar/sandbox/cli/debug/tests (32 files) | 0 import-path bugs — added task boundary lock, self-check checklist, anti-pattern gallery |
+
+v3 prompt saved at `scratch/subagent_translation_prompt_v3.md` — use for all future translations.
+
+### The "vi.mock Cross-Package Is Broken" Myth — BUSTED
+39 adapter test failures all traced to test authoring bugs:
+- `coreMocks.accumulate` undefined (not in vi.hoisted block)
+- `vi.fn(()=>...)` arrow functions silently break ESM mocking (use `function()`)
+- Stub→real translation changed expected values
+- `vi.hoisted()` can't call `os.tmpdir()` (use `beforeEach` instead)
+- **Zero failures caused by vitest cross-package mock limitations**
+
+### vitest Partial Mock — The Correct Pattern
+```typescript
+vi.mock("module", async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, functionToMock: vi.fn().mockReturnValue(x) };
+});
+```
+Keeps ALL original exports intact, only overrides what you mock. Equivalent to Python `patch("module.func")`.
+
+### vi.hoisted() Cannot Use Node Builtins
+`vi.hoisted()` runs before ESM imports initialize. `os.tmpdir()`, `path.join()` inside hoisted crash. Fix: `let` + `beforeEach`.
+
+### Architecture Boundary Test
+`packages/core/tests/test_architecture.test.ts` — scans all core source files, fails immediately if any imports from `adapter-antigravity/`. Python had `test_architecture.py`, now TS has it too.
+
+### Connection Parameter — Design Decision
+Python core functions internally open/close their own connections (`with closing(get_conn())`). TS Phase 59 made `conn` an explicit parameter. Phase 60 reverted to match Python — all core storage functions now manage connections internally. Sidecar shared-transaction support deferred to Phase 98 #14.
+
+---
+
 ## Phase 59 JS/TS Migration — Lessons Learned
 
 ### Subagent File Overwrite Hazard
@@ -205,6 +251,6 @@ When running parallel subagents that edit the same test files, later subagents c
 |-------|---------|--------|
 | 58 | Core extraction (Python hooks → core) | ✅ committed |
 | 59 | Core → TypeScript (25 modules + 17 tests) | ✅ committed |
-| 60 | Adapter rewrite (hooks/bridge/sidecar → TS) | PENDING |
+| 60 | Adapter rewrite (29 src + 17 test files, 754 pass) | ✅ complete |
 | 98 | Optimizations & SQLite strategy | PENDING |
 | 99 | OpenCode adapter | PENDING |

@@ -46,6 +46,7 @@ export {
 
 // Phantom
 export {
+  ACTION_PATTERNS,
   normalizeFilepath,
   resolvePhantomModifications,
 } from "./phantom";
@@ -66,6 +67,9 @@ export {
   isInfrastructureProcess,
   isProcessExpired,
 } from "./zombie";
+
+// Filesystem
+export { calculateMd5, getSnapshot, diffSnapshots, getActiveFiles } from "./filesystem";
 
 // Logger
 export { setTraceId, init as initLogger, debug, info, warn, error, profile } from "./logger";

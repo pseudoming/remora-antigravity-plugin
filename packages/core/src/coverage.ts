@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import { getDecisionConfirmed, getConfirmedDecisionIds } from "./storage/decisions";
 
 interface Decision {
@@ -16,7 +15,6 @@ interface Topic {
  * are covered by the output topics' decision text and confirmed decision IDs.
  */
 export function calculateFactualConfidence(
-  conn: Database.Database,
   baselineFiles: string[],
   baselineActions: string[],
   outputTopics: Topic[]
@@ -51,7 +49,7 @@ export function calculateFactualConfidence(
       const decIdNum = parseInt(decId, 10);
       if (!isNaN(decIdNum)) {
         try {
-          coveredActions += getDecisionConfirmed(conn, decIdNum) ? 1 : 0;
+          coveredActions += getDecisionConfirmed(decIdNum) ? 1 : 0;
         } catch {
           // pass
         }
@@ -71,11 +69,10 @@ export function calculateFactualConfidence(
  * Logs a warning if any confirmed IDs are missing (hard anchor violation).
  */
 export function validateIdInheritance(
-  conn: Database.Database,
   projectUuid: string,
   newTopics: Topic[]
 ): boolean {
-  const confirmedIds = getConfirmedDecisionIds(conn, projectUuid);
+  const confirmedIds = getConfirmedDecisionIds(projectUuid);
   if (!confirmedIds || confirmedIds.size === 0) {
     return true;
   }

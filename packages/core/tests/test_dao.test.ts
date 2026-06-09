@@ -152,18 +152,18 @@ describe("test_session_state_operations", () => {
   it("test session state operations", () => {
     const conn = createConn();
     // Test read/write mode
-    expect(dao.readMode(conn, "session_1")).toBe("standard");
-    dao.writeMode(conn, "session_1", "relax");
-    expect(dao.readMode(conn, "session_1")).toBe("relax");
+    expect(dao.readMode("session_1")).toBe("standard");
+    dao.writeMode("session_1", "relax");
+    expect(dao.readMode("session_1")).toBe("relax");
 
     // Test cold start
-    const latest = dao.getLatestSession(conn);
+    const latest = dao.getLatestSession();
     expect(latest).not.toBeNull();
     expect(latest!.session_id).toBe("session_1");
     expect(latest!.is_cold_start).toBe(1); // is_cold_start defaults to 1 when inserted
 
-    dao.updateColdStart(conn, "session_1", 0);
-    const latest2 = dao.getLatestSession(conn);
+    dao.updateColdStart("session_1", 0);
+    const latest2 = dao.getLatestSession();
     expect(latest2!.is_cold_start).toBe(0);
 
     conn.close();
@@ -173,13 +173,13 @@ describe("test_session_state_operations", () => {
 describe("test_watermark_operations", () => {
   it("test watermark operations", () => {
     const conn = createConn();
-    expect(dao.getProjectUuidByConv(conn, "conv_1")).toBeNull();
+    expect(dao.getProjectUuidByConv("conv_1")).toBeNull();
 
     conn.prepare(
       "INSERT INTO watermarks (conversation_id, project_uuid) VALUES ('conv_1', 'proj_1')"
     ).run();
 
-    expect(dao.getProjectUuidByConv(conn, "conv_1")).toBe("proj_1");
+    expect(dao.getProjectUuidByConv("conv_1")).toBe("proj_1");
 
     conn.close();
   });
@@ -188,26 +188,26 @@ describe("test_watermark_operations", () => {
 describe("test_topic_operations", () => {
   it("test topic operations", () => {
     const conn = createConn();
-    expect(dao.getActiveTopic(conn, "proj_1")).toBeNull();
+    expect(dao.getActiveTopic("proj_1")).toBeNull();
 
-    dao.createOrUpdateTopic(conn, "proj_1", "topic_A", "My Topic A");
-    expect(dao.getActiveTopic(conn, "proj_1")).toBe("topic_A");
+    dao.createOrUpdateTopic("proj_1", "topic_A", "My Topic A");
+    expect(dao.getActiveTopic("proj_1")).toBe("topic_A");
 
     // Updating same topic
-    dao.createOrUpdateTopic(conn, "proj_1", "topic_A", "My Topic A updated");
-    const topics = dao.getTopicsByUuid(conn, "proj_1");
+    dao.createOrUpdateTopic("proj_1", "topic_A", "My Topic A updated");
+    const topics = dao.getTopicsByUuid("proj_1");
     expect(topics.length).toBe(1);
     expect(topics[0].summary).toBe("My Topic A updated");
 
     // Updating with empty summary should not overwrite
-    dao.createOrUpdateTopic(conn, "proj_1", "topic_A", "");
-    const topics2 = dao.getTopicsByUuid(conn, "proj_1");
+    dao.createOrUpdateTopic("proj_1", "topic_A", "");
+    const topics2 = dao.getTopicsByUuid("proj_1");
     expect(topics2[0].summary).toBe("My Topic A updated");
 
     // Closing topic
-    dao.closeTopic(conn, "proj_1", "topic_A");
-    expect(dao.getActiveTopic(conn, "proj_1")).toBeNull();
-    const topics3 = dao.getTopicsByUuid(conn, "proj_1");
+    dao.closeTopic("proj_1", "topic_A");
+    expect(dao.getActiveTopic("proj_1")).toBeNull();
+    const topics3 = dao.getTopicsByUuid("proj_1");
     expect(topics3[0].status).toBe("closed");
 
     conn.close();
@@ -252,13 +252,12 @@ describe("test_fts5_recall_operations", () => {
     `);
 
     // test recall_fts5_logs
-    const logs = dao.recallFts5Logs(conn, "proj_1", "conv_1", "202606606");
+    const logs = dao.recallFts5Logs("proj_1", "conv_1", "202606606");
     expect(logs.length).toBe(1);
     expect(logs[0]).toBe("user: hello world 202606606");
 
     // test recall_decisions_by_fts5_topic
     const decisions = dao.recallDecisionsByFts5Topic(
-      conn,
       "proj_1",
       "conv_1",
       "202606606"
@@ -272,7 +271,6 @@ describe("test_fts5_recall_operations", () => {
 
     // test recall_decisions_by_like
     const likeDecisions = dao.recallDecisionsByLike(
-      conn,
       "proj_1",
       "conv_1",
       "202606606"
@@ -290,7 +288,7 @@ describe("test_fts5_recall_operations", () => {
       "INSERT INTO project_topics (uuid, topic_id, last_accessed_at) VALUES ('proj_1', 'topic_A', '2000-01-01 00:00:00')"
     ).run();
 
-    dao.touchTopicsAccessedByRecall(conn, "proj_1", "conv_1", "202606606");
+    dao.touchTopicsAccessedByRecall("proj_1", "conv_1", "202606606");
 
     const row = conn
       .prepare(
@@ -322,7 +320,7 @@ describe("test_topic_garbage_collection", () => {
     conn.close();
 
     const gcConn = createConn();
-    dao.runTopicGarbageCollection(gcConn);
+    dao.runTopicGarbageCollection();
     gcConn.close();
 
     const checkConn = createConn();
@@ -388,7 +386,7 @@ describe("test_prune_expired_watermarks", () => {
     fs.mkdirSync(path.join(brainDir, "c4"));
 
     const pruneConn = createConn();
-    dao.pruneExpiredWatermarks(pruneConn, brainDir);
+    dao.pruneExpiredWatermarks(brainDir);
     pruneConn.close();
 
     const checkConn = createConn();
@@ -441,19 +439,19 @@ describe("test_check_db_exists", () => {
 describe("test_switch_topic", () => {
   it("test switch topic", () => {
     const conn = createConn();
-    dao.createOrUpdateTopic(conn, "proj_1", "topic_A", "Topic A");
-    expect(dao.getActiveTopic(conn, "proj_1")).toBe("topic_A");
-    dao.switchTopic(conn, "proj_1", "topic_B");
-    expect(dao.getActiveTopic(conn, "proj_1")).toBe("topic_B");
-    const topics = dao.getTopicsByUuid(conn, "proj_1");
+    dao.createOrUpdateTopic("proj_1", "topic_A", "Topic A");
+    expect(dao.getActiveTopic("proj_1")).toBe("topic_A");
+    dao.switchTopic("proj_1", "topic_B");
+    expect(dao.getActiveTopic("proj_1")).toBe("topic_B");
+    const topics = dao.getTopicsByUuid("proj_1");
     const topicDict: Record<string, string> = {};
     for (const t of topics) {
       topicDict[t.topicId] = t.status;
     }
     expect(topicDict["topic_A"]).toBe("closed");
     expect(topicDict["topic_B"]).toBe("open");
-    dao.switchTopic(conn, "proj_1", "topic_A");
-    expect(dao.getActiveTopic(conn, "proj_1")).toBe("topic_A");
+    dao.switchTopic("proj_1", "topic_A");
+    expect(dao.getActiveTopic("proj_1")).toBe("topic_A");
     conn.close();
   });
 });
@@ -461,13 +459,13 @@ describe("test_switch_topic", () => {
 describe("test_force_cold_start_latest_session", () => {
   it("test force cold start latest session", () => {
     const conn = createConn();
-    dao.writeMode(conn, "session_1", "standard");
-    dao.writeMode(conn, "session_2", "standard");
+    dao.writeMode("session_1", "standard");
+    dao.writeMode("session_2", "standard");
     conn.prepare(
       "UPDATE session_state SET updated_at = datetime('now', '-1 hours') WHERE session_id = 'session_1'"
     ).run();
-    dao.updateColdStart(conn, "session_1", 0);
-    dao.forceColdStartLatestSession(conn, "session_1");
+    dao.updateColdStart("session_1", 0);
+    dao.forceColdStartLatestSession("session_1");
     const row = conn
       .prepare(
         "SELECT is_cold_start FROM session_state WHERE session_id='session_1'"
@@ -477,9 +475,9 @@ describe("test_force_cold_start_latest_session", () => {
     conn.prepare(
       "UPDATE session_state SET updated_at = datetime('now', '-2 hours') WHERE session_id = 'session_1'"
     ).run();
-    dao.updateColdStart(conn, "session_2", 0);
-    dao.forceColdStartLatestSession(conn);
-    const latest = dao.getLatestSession(conn);
+    dao.updateColdStart("session_2", 0);
+    dao.forceColdStartLatestSession();
+    const latest = dao.getLatestSession();
     expect(latest!.is_cold_start).toBe(1);
     expect(latest!.session_id).toBe("session_2");
     conn.close();
@@ -514,8 +512,8 @@ describe("test_get_topic_id_by_decision", () => {
 describe("test_touch_topic_source_manual", () => {
   it("test touch topic source manual", () => {
     const conn = createConn();
-    dao.createOrUpdateTopic(conn, "proj_1", "topic_A");
-    dao.touchTopicSourceManual(conn, "proj_1", "topic_A");
+    dao.createOrUpdateTopic("proj_1", "topic_A");
+    dao.touchTopicSourceManual("proj_1", "topic_A");
     const row = conn
       .prepare(
         "SELECT source FROM project_topics WHERE uuid='proj_1' AND topic_id='topic_A'"
@@ -560,14 +558,12 @@ describe("test_recall_decisions_edge_cases", () => {
     `);
 
     const decisions = dao.recallDecisionsByFts5Topic(
-      conn,
       "proj_1",
       "conv_1",
       "hello"
     );
     expect(decisions.length).toBe(5);
     const likeDecisions = dao.recallDecisionsByLike(
-      conn,
       "proj_1",
       "conv_1",
       "Test"
@@ -581,11 +577,11 @@ describe("test_recall_decisions_edge_cases", () => {
 describe("test_merge_physical_files_to_topic", () => {
   it("test merge physical files to topic", () => {
     const conn = createConn();
-    dao.createOrUpdateTopic(conn, "proj_1", "topic_A");
+    dao.createOrUpdateTopic("proj_1", "topic_A");
     conn.prepare(
       "UPDATE project_topics SET associated_files='not-valid-json' WHERE uuid='proj_1' AND topic_id='topic_A'"
     ).run();
-    dao.mergePhysicalFilesToTopic(conn, "proj_1", "topic_A", [
+    dao.mergePhysicalFilesToTopic("proj_1", "topic_A", [
       "/path/to/fallback.py",
     ]);
     let row = conn
@@ -597,7 +593,7 @@ describe("test_merge_physical_files_to_topic", () => {
     expect(data.length).toBe(1);
     expect(data[0].file).toBe("/path/to/fallback.py");
 
-    dao.mergePhysicalFilesToTopic(conn, "proj_1", "topic_A", [
+    dao.mergePhysicalFilesToTopic("proj_1", "topic_A", [
       "/path/to/file1.py",
       "/path/to/file2.py",
     ]);
@@ -609,7 +605,7 @@ describe("test_merge_physical_files_to_topic", () => {
     data = JSON.parse(row.associated_files);
     expect(data.length).toBe(3);
 
-    dao.mergePhysicalFilesToTopic(conn, "proj_1", "topic_A", [
+    dao.mergePhysicalFilesToTopic("proj_1", "topic_A", [
       "/path/to/file1.py",
     ]);
     row = conn
@@ -620,7 +616,7 @@ describe("test_merge_physical_files_to_topic", () => {
     data = JSON.parse(row.associated_files);
     expect(data.length).toBe(3);
 
-    dao.mergePhysicalFilesToTopic(conn, "proj_1", "topic_A", [
+    dao.mergePhysicalFilesToTopic("proj_1", "topic_A", [
       "/path/to/file3.py",
     ]);
     row = conn
@@ -636,7 +632,7 @@ describe("test_merge_physical_files_to_topic", () => {
     ).run(
       JSON.stringify([{ file: "/path/to/file1.py", source: "auto" }])
     );
-    dao.mergePhysicalFilesToTopic(conn, "proj_1", "topic_A", [
+    dao.mergePhysicalFilesToTopic("proj_1", "topic_A", [
       "/path/to/file1.py",
     ]);
     row = conn
@@ -659,24 +655,24 @@ describe("test_runtime_hook_operations", () => {
   it("test runtime hook operations", () => {
     const conn = createConn();
 
-    expect(dao.getRuntimeHookValue(conn, "s1", 0, "k1")).toBeNull();
-    dao.setRuntimeHookValue(conn, "s1", 0, "k1", "v1");
-    expect(dao.getRuntimeHookValue(conn, "s1", 0, "k1")).toBe("v1");
-    dao.setRuntimeHookValue(conn, "s1", 0, "k1", "v2");
-    expect(dao.getRuntimeHookValue(conn, "s1", 0, "k1")).toBe("v2");
-    dao.deleteRuntimeHookValue(conn, "s1", 0, "k1");
-    expect(dao.getRuntimeHookValue(conn, "s1", 0, "k1")).toBeNull();
-    dao.setRuntimeHookValue(conn, "s1", 0, "k", "v0");
-    dao.setRuntimeHookValue(conn, "s1", 1, "k", "v1");
-    dao.trimRuntimeHookStates(conn, "s1", 1);
-    expect(dao.getRuntimeHookValue(conn, "s1", 0, "k")).toBe("v0");
-    expect(dao.getRuntimeHookValue(conn, "s1", 1, "k")).toBeNull();
-    expect(dao.getHookState(conn, "s1", 0, "k")).toBe("v0");
-    dao.setHookState(conn, "s1", 0, "k", "alias");
-    expect(dao.getHookState(conn, "s1", 0, "k")).toBe("alias");
-    dao.deleteHookState(conn, "s1", 0, "k");
-    expect(dao.getHookState(conn, "s1", 0, "k")).toBeNull();
-    dao.trimHookStates(conn, "s1", 0);
+    expect(dao.getRuntimeHookValue("s1", 0, "k1")).toBeNull();
+    dao.setRuntimeHookValue("s1", 0, "k1", "v1");
+    expect(dao.getRuntimeHookValue("s1", 0, "k1")).toBe("v1");
+    dao.setRuntimeHookValue("s1", 0, "k1", "v2");
+    expect(dao.getRuntimeHookValue("s1", 0, "k1")).toBe("v2");
+    dao.deleteRuntimeHookValue("s1", 0, "k1");
+    expect(dao.getRuntimeHookValue("s1", 0, "k1")).toBeNull();
+    dao.setRuntimeHookValue("s1", 0, "k", "v0");
+    dao.setRuntimeHookValue("s1", 1, "k", "v1");
+    dao.trimRuntimeHookStates("s1", 1);
+    expect(dao.getRuntimeHookValue("s1", 0, "k")).toBe("v0");
+    expect(dao.getRuntimeHookValue("s1", 1, "k")).toBeNull();
+    expect(dao.getHookState("s1", 0, "k")).toBe("v0");
+    dao.setHookState("s1", 0, "k", "alias");
+    expect(dao.getHookState("s1", 0, "k")).toBe("alias");
+    dao.deleteHookState("s1", 0, "k");
+    expect(dao.getHookState("s1", 0, "k")).toBeNull();
+    dao.trimHookStates("s1", 0);
 
     conn.close();
   });
@@ -689,16 +685,16 @@ describe("test_common_exceptions", () => {
     // Set REMORA_DB_PATH to an invalid location so self-connecting functions fail
     process.env.REMORA_DB_PATH = "/tmp/nonexistent_test_dir_12345/test.db";
 
-    expect(dao.readMode(broken, "test")).toBe("standard");
-    expect(dao.getLatestSession(broken)).toBeNull();
-    expect(dao.getProjectUuidByConv(broken, "test")).toBeNull();
-    expect(dao.getActiveTopic(broken, "test")).toBeNull();
-    expect(dao.getTopicsByUuid(broken, "test")).toEqual([]);
+    expect(dao.readMode("test")).toBe("standard");
+    expect(dao.getLatestSession()).toBeNull();
+    expect(dao.getProjectUuidByConv("test")).toBeNull();
+    expect(dao.getActiveTopic("test")).toBeNull();
+    expect(dao.getTopicsByUuid("test")).toEqual([]);
     expect(dao.getConfirmedDecisions("test", "test")).toEqual([]);
     expect(dao.getTopicIdByDecision(999)).toBeNull();
-    expect(dao.recallFts5Logs(broken, "test", "test", "test")).toEqual([]);
-    expect(dao.recallDecisionsByFts5Topic(broken, "test", "test", "test")).toEqual([]);
-    expect(dao.recallDecisionsByLike(broken, "test", "test", "test")).toEqual([]);
+    expect(dao.recallFts5Logs("test", "test", "test")).toEqual([]);
+    expect(dao.recallDecisionsByFts5Topic("test", "test", "test")).toEqual([]);
+    expect(dao.recallDecisionsByLike("test", "test", "test")).toEqual([]);
 
     process.env.REMORA_DB_PATH = TEST_DB_PATH;
   });
@@ -707,16 +703,15 @@ describe("test_common_exceptions", () => {
 describe("test_runtime_hook_exceptions", () => {
   it("test runtime hook exceptions", () => {
     const broken = brokenConn();
-    expect(dao.getRuntimeHookValue(broken, "test", 0, "key")).toBeNull();
-    dao.setRuntimeHookValue(broken, "test", 0, "key", "val");
-    dao.deleteRuntimeHookValue(broken, "test", 0, "key");
-    dao.trimRuntimeHookStates(broken, "test", 0);
+    expect(dao.getRuntimeHookValue("test", 0, "key")).toBeNull();
+    dao.setRuntimeHookValue("test", 0, "key", "val");
+    dao.deleteRuntimeHookValue("test", 0, "key");
+    dao.trimRuntimeHookStates("test", 0);
   });
 });
 
 describe("test_gc_exception", () => {
   it("test gc exception", () => {
-    const broken = brokenConn();
     const origExit = process.exit;
     let exitCalled = false;
     let exitCode: number | null = null;
@@ -725,21 +720,23 @@ describe("test_gc_exception", () => {
       exitCode = code ?? 0;
       throw new Error("SystemExit");
     }) as any;
+    const savePath = testDbPath.path;
+    testDbPath.path = "/dev/null/nonexistent/test.db";
     try {
       expect(() => {
-        dao.runTopicGarbageCollection(broken);
+        dao.runTopicGarbageCollection();
       }).toThrow("SystemExit");
       expect(exitCalled).toBe(true);
       expect(exitCode).toBe(1);
     } finally {
       process.exit = origExit;
+      testDbPath.path = savePath;
     }
   });
 });
 
 describe("test_prune_exception", () => {
   it("test prune exception", () => {
-    const broken = brokenConn();
     const tmpDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "test_remora_prune_")
     );
@@ -751,14 +748,17 @@ describe("test_prune_exception", () => {
       exitCode = code ?? 0;
       throw new Error("SystemExit");
     }) as any;
+    const savePath = testDbPath.path;
+    testDbPath.path = "/dev/null/nonexistent/test.db";
     try {
       expect(() => {
-        dao.pruneExpiredWatermarks(broken, tmpDir);
+        dao.pruneExpiredWatermarks(tmpDir);
       }).toThrow("SystemExit");
       expect(exitCalled).toBe(true);
       expect(exitCode).toBe(1);
     } finally {
       process.exit = origExit;
+      testDbPath.path = savePath;
       try {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       } catch {}
@@ -779,7 +779,7 @@ describe("test_prune_expired_watermarks_artifact_sync", () => {
     conn.close();
 
     const pruneConn = createConn();
-    dao.pruneExpiredWatermarks(pruneConn, brainDir);
+    dao.pruneExpiredWatermarks(brainDir);
     pruneConn.close();
 
     const checkConn = createConn();
@@ -808,7 +808,7 @@ describe("test_prune_expired_watermarks_invalid_dir", () => {
     }) as any;
     try {
       expect(() => {
-        dao.pruneExpiredWatermarks(conn, "/nonexistent/path_xyz123");
+        dao.pruneExpiredWatermarks("/nonexistent/path_xyz123");
       }).toThrow("SystemExit");
       expect(exitCalled).toBe(true);
     } finally {
@@ -833,7 +833,7 @@ describe("test_prune_expired_watermarks_no_delete", () => {
     conn.close();
 
     const pruneConn = createConn();
-    dao.pruneExpiredWatermarks(pruneConn, brainDir);
+    dao.pruneExpiredWatermarks(brainDir);
     pruneConn.close();
 
     const checkConn = createConn();
@@ -852,10 +852,10 @@ describe("test_prune_expired_watermarks_no_delete", () => {
 describe("test_file_changes_insert_and_query", () => {
   it("test file changes insert and query", () => {
     const conn = createConn();
-    dao.insertFileChange(conn, "proj_1", "conv_1", "auth.py", "snapshot");
-    dao.insertFileChange(conn, "proj_1", "conv_1", "auth.py", "snapshot");
-    dao.insertFileChange(conn, "proj_1", "conv_1", "middleware.py", "snapshot");
-    dao.insertFileChange(conn, "proj_1", "conv_2", "logger.py", "sandbox");
+    dao.insertFileChange("proj_1", "conv_1", "auth.py", "snapshot");
+    dao.insertFileChange("proj_1", "conv_1", "auth.py", "snapshot");
+    dao.insertFileChange("proj_1", "conv_1", "middleware.py", "snapshot");
+    dao.insertFileChange("proj_1", "conv_2", "logger.py", "sandbox");
 
     conn.prepare(
       "INSERT INTO topic_decisions (project_uuid, topic_id, conversation_id, decision, rationale) VALUES ('proj_1', 'topic_A', 'conv_1', 'Use python', 'fast')"
@@ -863,12 +863,12 @@ describe("test_file_changes_insert_and_query", () => {
     conn.close();
 
     const queryConn = createConn();
-    const files = dao.getFilesByTopic(queryConn, "proj_1", "topic_A");
+    const files = dao.getFilesByTopic("proj_1", "topic_A");
     expect(files.includes("auth.py")).toBe(true);
     expect(files.includes("middleware.py")).toBe(true);
     expect(files.includes("logger.py")).toBe(false);
 
-    const decisions = dao.getDecisionsByFile(queryConn, "proj_1", "auth.py");
+    const decisions = dao.getDecisionsByFile("proj_1", "auth.py");
     expect(decisions.length).toBe(1);
     expect(decisions[0].decision).toBe("Use python");
 
@@ -881,14 +881,14 @@ describe("test_gate_should_fire_and_mark", () => {
     const conn = createConn();
 
     // Gate fires when no prior state, then marks fired.
-    const result = dao.shouldFire(conn, "conv_1", "test_gate_key", "v1");
+    const result = dao.shouldFire("conv_1", "test_gate_key", "v1");
     expect(result).toBe(true);
 
-    dao.markFired(conn, "conv_1", "test_gate_key", "v1");
-    const result2 = dao.shouldFire(conn, "conv_1", "test_gate_key", "v1");
+    dao.markFired("conv_1", "test_gate_key", "v1");
+    const result2 = dao.shouldFire("conv_1", "test_gate_key", "v1");
     expect(result2).toBe(false);
 
-    const result3 = dao.shouldFire(conn, "conv_1", "test_gate_key", "v2");
+    const result3 = dao.shouldFire("conv_1", "test_gate_key", "v2");
     expect(result3).toBe(true);
 
     conn.close();
@@ -900,12 +900,12 @@ describe("test_gate_dedup_and_clear", () => {
     const conn = createConn();
 
     // Same value dedup, different value clears stale.
-    dao.markFired(conn, "conv_2", "test_dedup", "42");
-    expect(dao.isDuplicate(conn, "conv_2", "test_dedup", "42")).toBe(true);
-    expect(dao.isDuplicate(conn, "conv_2", "test_dedup", "99")).toBe(false);
+    dao.markFired("conv_2", "test_dedup", "42");
+    expect(dao.isDuplicate("conv_2", "test_dedup", "42")).toBe(true);
+    expect(dao.isDuplicate("conv_2", "test_dedup", "99")).toBe(false);
 
-    dao.markFired(conn, "conv_2", "test_dedup", "99");
-    expect(dao.isDuplicate(conn, "conv_2", "test_dedup", "42")).toBe(false);
+    dao.markFired("conv_2", "test_dedup", "99");
+    expect(dao.isDuplicate("conv_2", "test_dedup", "42")).toBe(false);
 
     conn.close();
   });
@@ -917,7 +917,7 @@ describe("test_bump_injection_once", () => {
     conn.prepare(
       "INSERT INTO topic_decisions (id, project_uuid, topic_id, decision, user_confirmed) VALUES (999, 'proj_1', 't1', 'test decision', 0)"
     ).run();
-    decisionsMod.bumpInjection(conn, 999);
+    decisionsMod.bumpInjection(999);
     const row = conn
       .prepare(
         "SELECT injected_count, last_injected_at FROM topic_decisions WHERE id=999"
@@ -936,7 +936,7 @@ describe("test_bump_injection_multiple", () => {
       "INSERT INTO topic_decisions (id, project_uuid, topic_id, decision, user_confirmed) VALUES (998, 'proj_1', 't1', 'multi bump', 0)"
     ).run();
     for (let i = 0; i < 3; i++) {
-      decisionsMod.bumpInjection(conn, 998);
+      decisionsMod.bumpInjection(998);
     }
     const row = conn
       .prepare("SELECT injected_count FROM topic_decisions WHERE id=998")
