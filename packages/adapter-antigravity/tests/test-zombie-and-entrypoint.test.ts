@@ -157,7 +157,7 @@ describe("TestZombieDetectorInterception", () => {
   beforeEach(() => {
     vi.spyOn(process, "getuid").mockReturnValue(1000);
     vi.spyOn(process, "pid", "get").mockReturnValue(1);
-    mockGetSysUptime.mockReturnValue(100.0);
+    mockGetSysUptime.mockReturnValue(380.0);
     mockCleanWhitelist.mockReturnValue(new Set());
     mockExistsSync.mockReturnValue(false);
     mockStatSync.mockReturnValue({ uid: 1000 } as any);

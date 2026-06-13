@@ -47,22 +47,13 @@ export function getOrCreateConversation(prompt: string): string {
     if (convId) {
       const cdal = new ConversationDataAccessLayer(convId);
       let shouldRollover = false;
-      if (fs.existsSync(cdal.dbPath)) {
+      if (!cdal.exists()) {
+        shouldRollover = true;
+      } else {
         try {
-          const db = new Database(cdal.dbPath, { timeout: 15000 });
-          try {
-            const row = db.prepare("SELECT count(*) as cnt FROM steps").get() as { cnt: number };
-            const lineCount = row.cnt;
-            if (lineCount > 150) {
-              shouldRollover = true;
-              console.log(`[Remora] 会话 ${convId} 步数已达 ${lineCount}，启动自动换代。`);
-            }
-          } finally {
-            db.close();
-          }
-        } catch {
-          // pass
-        }
+          const lineCount = cdal.getMaxStepIndex();
+          if (lineCount > 150) { shouldRollover = true; }
+        } catch {}
       }
 
       if (shouldRollover) {

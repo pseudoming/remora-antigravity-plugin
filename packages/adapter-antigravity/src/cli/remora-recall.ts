@@ -74,3 +74,7 @@ export function main(): void {
     dao.touchTopicsAccessedByRecall(projectUuid, convId, ftsKeyword);
   }
 }
+
+if (typeof require !== "undefined" && require.main === module) {
+  main();
+}

@@ -17,14 +17,12 @@ function decryptPb(data: Buffer): Buffer {
 
 export class ConversationDataAccessLayer {
   convId: string;
-  brainDir: string;
   dbPath: string;
   pbPath: string;
   private _pbSteps: Record<string, any>[] | null = null;
 
   constructor(convId: string) {
     this.convId = convId;
-    this.brainDir = getBrainDir();
     this.dbPath = path.join(getConversationsDir(), `${convId}.db`);
     this.pbPath = path.join(getConversationsDir(), `${convId}.pb`);
   }
@@ -43,6 +41,10 @@ export class ConversationDataAccessLayer {
       return entry;
     });
     return this._pbSteps;
+  }
+
+  public exists(): boolean {
+    return this._dbHasContent() || this.hasPb();
   }
 
   private _dbHasContent(): boolean {

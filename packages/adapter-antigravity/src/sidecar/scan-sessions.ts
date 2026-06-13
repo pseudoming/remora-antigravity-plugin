@@ -25,8 +25,8 @@ function getProjectIdForConv(convId: string): string {
   return getProjectId(convId);
 }
 
-export function getActiveConversations(): Array<{ projectUuid: string; conversationId: string; dbPath: string }> {
-  const activeSessions: Array<{ projectUuid: string; conversationId: string; dbPath: string }> = [];
+export function getActiveConversations(): Array<{ projectUuid: string; conversationId: string }> {
+  const activeSessions: Array<{ projectUuid: string; conversationId: string }> = [];
   if (!fs.existsSync(BRAIN_DIR)) {
     return [];
   }
@@ -43,14 +43,13 @@ export function getActiveConversations(): Array<{ projectUuid: string; conversat
     }
 
     const cdal = new ConversationDataAccessLayer(convId);
-    if (fs.existsSync(cdal.dbPath)) {
+    if (cdal.exists()) {
       const mtime = cdal.getDbMtime();
       if (currentTime - mtime <= 10 * 24 * 3600) {
         const projectUuid = getProjectIdForConv(convId);
         activeSessions.push({
           projectUuid: projectUuid,
           conversationId: convId,
-          dbPath: cdal.dbPath,
         });
       }
     }

@@ -4,8 +4,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-
-import { getDataDir } from "../bridge/paths";
+import { getDataDir, getAntigravityDir } from "../bridge/paths";
 import { initDb } from "../schema/schema-init";
 
 import { pruneExpiredWatermarks } from "../maintenance/session-gc";
@@ -20,7 +19,8 @@ import { getConn, getAllProjectUuids } from "@remora/core";
 
 export function pruneSidecarEvents(): void {
   try {
-    const eventsDir = path.join(getDataDir(), "events");
+    const pluginName = process.env.ANTIGRAVITY_PLUGIN_NAME ?? "remora-plugin";
+    const eventsDir = path.join(getAntigravityDir(), "sidecar_data", pluginName, "memory-compactor", "events");
     if (fs.existsSync(eventsDir)) {
       for (const f of fs.readdirSync(eventsDir)) {
         if (f.endsWith(".json")) {

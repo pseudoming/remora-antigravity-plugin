@@ -18,6 +18,9 @@ vi.mock("../src/bridge/conversation", () => ({
     constructor(convId: string) {
       this.convId = convId;
     }
+    exists() {
+      return true;
+    }
     getMaxStepIndex() {
       return 0;
     }

@@ -219,10 +219,9 @@ async function getInspectMain(): Promise<(args?: string[]) => void> {
     try {
       const mod = await import("../src/debug/inspect");
       inspectMain = mod.main as (args?: string[]) => void;
-    } catch {
-      throw new Error(
-        "debug/inspect TS module not found at ../src/debug/inspect.ts. Create it before running these tests."
-      );
+    } catch (err) {
+      console.error("DEBUG IMPORT ERROR:", err);
+      throw err;
     }
   }
   return inspectMain;

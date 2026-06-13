@@ -123,6 +123,14 @@ const conversationMocks = vi.hoisted(() => {
     getCurrentTurnIdx: vi.fn().mockReturnValue(0),
     getUserInputCount: vi.fn().mockReturnValue(0),
     getDbMtime: vi.fn().mockReturnValue(0),
+    exists: vi.fn().mockImplementation(() => {
+      try {
+        return require("node:fs").existsSync(mockInstance.dbPath);
+      } catch {
+        return false;
+      }
+    }),
+    getMaxStepIndex: vi.fn().mockReturnValue(0),
   };
   function MockCDAL(_convId: string) {
     return mockInstance;

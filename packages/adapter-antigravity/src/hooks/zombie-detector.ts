@@ -21,7 +21,8 @@ export function logDuration(elapsed: number, exitCode: number = 0): void {
 export function main(context?: any): { decision?: string; reason?: string; injectSteps?: any[] } {
     try {
         return _main(context);
-    } catch {
+    } catch (e) {
+        console.error("ZOMBIE DETECTOR ERROR:", e);
         return { decision: "allow" };
     }
 }

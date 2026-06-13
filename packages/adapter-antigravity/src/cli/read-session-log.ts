@@ -8,7 +8,7 @@ import { ConversationDataAccessLayer } from "../bridge/conversation";
 function readLastUserAiRounds(convId: string, rounds: number = 10): void {
   const cdal = new ConversationDataAccessLayer(convId);
 
-  if (!fs.existsSync(cdal.dbPath)) {
+  if (!cdal.exists()) {
     console.log(`Error: db path not found for ID: ${convId}`);
     process.exit(1);
   }

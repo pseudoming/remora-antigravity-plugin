@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as path from "node:path";
 import * as os from "node:os";
 
-const { realFs, mockFs, testDataDir, coreMocks } = vi.hoisted(() => {
+const { realFs, mockFs, testDataDir, coreMocks, agentapiMocks } = vi.hoisted(() => {
   const osMod = require("node:os") as typeof import("node:os");
   const pathMod = require("node:path") as typeof import("node:path");
   const tmpDir = pathMod.join(osMod.tmpdir(), `remora_sidecar_test_${Date.now()}`);
@@ -28,8 +28,14 @@ const { realFs, mockFs, testDataDir, coreMocks } = vi.hoisted(() => {
       confirmDecisionsByIds: vi.fn(),
       markEventProcessed: vi.fn(),
     },
+    agentapiMocks: {
+      createConversation: vi.fn(),
+      sendMessage: vi.fn(),
+    },
   };
 });
+
+vi.mock("../src/bridge/agentapi", () => agentapiMocks);
 
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
@@ -42,6 +48,7 @@ vi.mock("../src/bridge/paths", async (importOriginal) => {
   return {
     ...actual,
     getDataDir: () => testDataDir.value,
+    getAntigravityDir: () => testDataDir.value,
     extractConvId: () => null,
     getDbPath: () => path.join(testDataDir.value, "mock_remora.db"),
   };
@@ -643,8 +650,24 @@ describe("TestConsumeEventQueue", () => {
 // ============================================================
 
 describe("TestPruneSidecarEvents", () => {
+  let originalHome: string | undefined;
+  let originalPluginName: string | undefined;
+
+  beforeEach(() => {
+    originalHome = process.env.HOME;
+    originalPluginName = process.env.ANTIGRAVITY_PLUGIN_NAME;
+    process.env.HOME = testDataDir.value;
+    process.env.ANTIGRAVITY_PLUGIN_NAME = "remora-plugin";
+  });
+
+  afterEach(() => {
+    process.env.HOME = originalHome;
+    process.env.ANTIGRAVITY_PLUGIN_NAME = originalPluginName;
+  });
+
   it("test_no_events_dir", () => {
-    const eventsDir = path.join(testDataDir.value, "events");
+    const pluginName = process.env.ANTIGRAVITY_PLUGIN_NAME ?? "remora-plugin";
+    const eventsDir = path.join(testDataDir.value, "sidecar_data", pluginName, "memory-compactor", "events");
     if (realFs.value.existsSync(eventsDir)) {
       realFs.value.rmSync(eventsDir, { recursive: true, force: true });
     }
@@ -652,7 +675,8 @@ describe("TestPruneSidecarEvents", () => {
   });
 
   it("test_prunes_json_files", () => {
-    const eventsDir = path.join(testDataDir.value, "events");
+    const pluginName = process.env.ANTIGRAVITY_PLUGIN_NAME ?? "remora-plugin";
+    const eventsDir = path.join(testDataDir.value, "sidecar_data", pluginName, "memory-compactor", "events");
     realFs.value.mkdirSync(eventsDir, { recursive: true });
     realFs.value.writeFileSync(path.join(eventsDir, "event1.json"), "{}");
     realFs.value.writeFileSync(path.join(eventsDir, "event2.json"), "{}");
@@ -665,6 +689,61 @@ describe("TestPruneSidecarEvents", () => {
     expect(realFs.value.existsSync(path.join(eventsDir, "not_json.txt"))).toBe(true);
 
     // Cleanup
-    realFs.value.rmSync(eventsDir, { recursive: true, force: true });
+    realFs.value.rmSync(path.join(testDataDir.value, "sidecar_data"), { recursive: true, force: true });
+  });
+});
+
+// ============================================================
+// TestGetOrCreateConversation
+// ============================================================
+
+describe("TestGetOrCreateConversation", () => {
+  let actualGetOrCreateConversation: any;
+
+  beforeEach(async () => {
+    const actual = await vi.importActual<any>("../src/sidecar/extract-decisions");
+    actualGetOrCreateConversation = actual.getOrCreateConversation;
+    agentapiMocks.createConversation.mockReset();
+    agentapiMocks.sendMessage.mockReset();
+  });
+
+  it("should recover and rollover when sidecar conversation db and pb files do not exist", () => {
+    const convId = "nonexistent-conv-id-999";
+    const markerFilePath = path.join(testDataDir.value, "compactor_conversation_id.txt");
+    realFs.value.mkdirSync(path.dirname(markerFilePath), { recursive: true });
+    realFs.value.writeFileSync(markerFilePath, convId);
+
+    agentapiMocks.createConversation.mockReturnValue({
+      response: {
+        newConversation: {
+          conversationId: "new-conv-id-888",
+          reply: "restored session reply",
+        },
+      },
+    });
+
+    const origExistsSync = mockFs.existsSync;
+    mockFs.existsSync.mockImplementation((p: string) => {
+      if (p === markerFilePath) {
+        return true;
+      }
+      if (p.endsWith(`${convId}.db`) || p.endsWith(`${convId}.pb`)) {
+        return false;
+      }
+      return realFs.value.existsSync(p);
+    });
+
+    try {
+      const result = actualGetOrCreateConversation("test prompt");
+      expect(result).toBe("restored session reply");
+
+      const newSavedConvId = realFs.value.readFileSync(markerFilePath, "utf-8").trim();
+      expect(newSavedConvId).toBe("new-conv-id-888");
+
+      expect(agentapiMocks.createConversation).toHaveBeenCalled();
+      expect(agentapiMocks.createConversation.mock.calls[0][0]).toContain("test prompt");
+    } finally {
+      mockFs.existsSync = origExistsSync;
+    }
   });
 });

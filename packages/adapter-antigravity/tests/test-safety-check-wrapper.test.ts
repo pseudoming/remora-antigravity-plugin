@@ -33,6 +33,8 @@ vi.mock("../src/bridge/conversation", () => {
   const mockInstance = {
     getCurrentTurnIdx: mocks.cdallGetCurrentTurnIdx,
     getCompactionWatermark: mocks.cdallGetCompactionWatermark,
+    exists: () => true,
+    getMaxStepIndex: () => 0,
   };
   return {
     ConversationDataAccessLayer: vi.fn(function () {

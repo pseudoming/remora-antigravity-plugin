@@ -42,7 +42,7 @@ const {
   const mockCdalmGetDbMtime = vi.fn<() => number>();
   const mockLoadExcludedIds = vi.fn<() => Set<string>>();
   const mockSaveExcludedIds = vi.fn<(ids: Set<string>) => void>();
-  const mockGetActiveConversations = vi.fn<() => Array<{ projectUuid: string; conversationId: string; dbPath: string }>>();
+  const mockGetActiveConversations = vi.fn<() => Array<{ projectUuid: string; conversationId: string }>>();
   const mockIsSubagentSession = vi.fn<(convId: string) => boolean>();
   const mockExtractSubagentReport = vi.fn<(convId: string) => { changedFiles: string[]; referencedFiles: string[] }>();
   return {
@@ -95,8 +95,29 @@ vi.mock("../src/bridge/conversation", () => ({
     get dbPath() {
       return mockCdalmDbPathRef.value;
     }
+    exists() {
+      try {
+        return require("node:fs").existsSync(this.dbPath);
+      } catch {
+        return false;
+      }
+    }
     getMaxStepIndex() {
-      return mockCdalmGetMaxStepIndex();
+      const val = mockCdalmGetMaxStepIndex();
+      if (val > 0) return val;
+      try {
+        if (require("node:fs").existsSync(this.dbPath)) {
+          const Database = require("better-sqlite3");
+          const db = new Database(this.dbPath);
+          try {
+            const row = db.prepare("SELECT count(*) as cnt FROM steps").get();
+            return row ? row.cnt : 0;
+          } finally {
+            db.close();
+          }
+        }
+      } catch {}
+      return val;
     }
     streamStepsForward(startIdx?: number) {
       return mockCdalmStreamForward(startIdx);
@@ -712,7 +733,7 @@ describe("processSessions", () => {
     );
 
     mockGetActiveConversations.mockReturnValue([
-      { projectUuid: "proj-uuid-1", conversationId: "conv-uuid-1", dbPath: "/fake/path" },
+      { projectUuid: "proj-uuid-1", conversationId: "conv-uuid-1" },
     ]);
     vi.spyOn(warmStorageSync, "readIncrementalLogs").mockReturnValue(["Some conversation content", 10, 5]);
     mockCreateConversation.mockReturnValue({
@@ -746,7 +767,7 @@ describe("processSessions", () => {
     );
 
     mockGetActiveConversations.mockReturnValue([
-      { projectUuid: "proj-uuid-1", conversationId: "conv-uuid-1", dbPath: "/fake/path" },
+      { projectUuid: "proj-uuid-1", conversationId: "conv-uuid-1" },
     ]);
     vi.spyOn(warmStorageSync, "readIncrementalLogs").mockReturnValue(["   ", 10, 5]);
 
@@ -762,8 +783,8 @@ describe("processSessions", () => {
 
   it("max execution time exceeded stops early", () => {
     mockGetActiveConversations.mockReturnValue([
-      { projectUuid: "p1", conversationId: "c1", dbPath: "/fake" },
-      { projectUuid: "p2", conversationId: "c2", dbPath: "/fake" },
+      { projectUuid: "p1", conversationId: "c1" },
+      { projectUuid: "p2", conversationId: "c2" },
     ]);
     const spyRead = vi.spyOn(warmStorageSync, "readIncrementalLogs");
 
@@ -778,7 +799,7 @@ describe("processSessions", () => {
     );
 
     mockGetActiveConversations.mockReturnValue([
-      { projectUuid: "proj-uuid-1", conversationId: "conv-uuid-1", dbPath: "/fake/path" },
+      { projectUuid: "proj-uuid-1", conversationId: "conv-uuid-1" },
     ]);
     vi.spyOn(warmStorageSync, "readIncrementalLogs").mockReturnValue(["some content", 10, 5]);
     mockCreateConversation.mockReturnValue({
@@ -808,7 +829,7 @@ describe("processSessions", () => {
     );
 
     mockGetActiveConversations.mockReturnValue([
-      { projectUuid: "proj-uuid-1", conversationId: "conv-uuid-1", dbPath: "/fake/path" },
+      { projectUuid: "proj-uuid-1", conversationId: "conv-uuid-1" },
     ]);
     vi.spyOn(warmStorageSync, "readIncrementalLogs").mockReturnValue(["some content", 10, 5]);
     mockIsSubagentSession.mockReturnValue(true);
@@ -1105,8 +1126,8 @@ const UUID_2 = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2";
 describe("getActiveConversations", () => {
   it("returns shuffled list", () => {
     mockGetActiveConversations.mockReturnValue([
-      { projectUuid: "project-1", conversationId: UUID_1, dbPath: "/fake/test.db" },
-      { projectUuid: "project-1", conversationId: UUID_2, dbPath: "/fake/test.db" },
+      { projectUuid: "project-1", conversationId: UUID_1 },
+      { projectUuid: "project-1", conversationId: UUID_2 },
     ]);
 
     const result = mockGetActiveConversations();
@@ -1123,7 +1144,7 @@ describe("getActiveConversations", () => {
 
   it("skips non uuid directories", () => {
     mockGetActiveConversations.mockReturnValue([
-      { projectUuid: "project-1", conversationId: UUID_1, dbPath: "/fake/test.db" },
+      { projectUuid: "project-1", conversationId: UUID_1 },
     ]);
 
     const result = mockGetActiveConversations();
