@@ -4,6 +4,7 @@ set -e
 
 # 1. 执行项目构建编译
 echo "🔨 Building Remora Plugin (Adapter & Core)..."
+npm --prefix packages/core run build
 npm --prefix packages/adapter-antigravity run build
 
 # 2. 物理隔离同步与部署

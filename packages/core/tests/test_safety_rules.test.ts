@@ -436,3 +436,17 @@ describe("GitCommitEscapeCheck", () => {
         expect(inspectCommand('git commit -m "feat: login ** critical"')).toEqual(["deny", "git_escape"]);
     });
 });
+
+describe("GlobBypassCheck", () => {
+    it("denies command with glob metacharacters and sensitive endings", () => {
+        expect(inspectCommand("cat scratch/subagent_shared/*.jsonl")).toEqual(["deny", "glob_bypass"]);
+        expect(inspectCommand("tail -n 50 .system_generated/worktrees/subagent-*/logs/*.log")).toEqual(["deny", "glob_bypass"]);
+        expect(inspectCommand("cat logs/test?.sqlite")).toEqual(["deny", "glob_bypass"]);
+    });
+
+    it("allows command with glob metacharacters but harmless endings", () => {
+        expect(inspectCommand("ls *.ts")).toEqual(["allow", ""]);
+        expect(inspectCommand("grep 'function' packages/**/*.ts")).toEqual(["allow", ""]);
+        expect(inspectCommand("npm install")).toEqual(["allow", ""]);
+    });
+});

@@ -96,6 +96,22 @@ function inspectTokens(tokens: string[], depth: number = 0, cmdStr: string = "")
     return ["deny", "syntax_error"];
   }
 
+  // 防范 Safety Regex Bypass: 静态检测带有通配符的敏感文件访问意图 (零 I/O 阻断)
+  for (const token of tokens) {
+    if (/[?*\[{]/.test(token)) {
+      const lower = token.toLowerCase();
+      const isSensitive =
+        lower.endsWith(".jsonl") ||
+        lower.endsWith(".log") ||
+        lower.endsWith(".sqlite") ||
+        lower.includes("/logs/") ||
+        lower.includes("/.system_generated/");
+      if (isSensitive) {
+        return ["deny", "glob_bypass"];
+      }
+    }
+  }
+
   for (const token of tokens) {
     if (token.includes(".pb")) {
       return ["deny", "pb_read"];

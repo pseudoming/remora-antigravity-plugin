@@ -11,7 +11,9 @@ export function getDbPath(): string {
 export function getConn(): any {
   const dbPath = getDbPath();
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  return new Database(dbPath, { timeout: 15000 });
+  const conn = new Database(dbPath, { timeout: 15000 });
+  conn.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -2000;");
+  return conn;
 }
 
 export function checkDbExists(): boolean {

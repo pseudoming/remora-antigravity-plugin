@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 console.log("🔨 Running custom tsup build pipeline...");
-execSync("npx tsup src/install.ts src/**/*.ts --format cjs --outDir dist --external @remora/core --external better-sqlite3", { stdio: 'inherit' });
+execSync("npx tsup --config " + path.join(__dirname, "tsup.config.ts"), { stdio: 'inherit' });
 
 // Copy schema.sql to the expected paths in dist
 const srcSchema = path.join(__dirname, 'src', 'schema', 'schema.sql');
