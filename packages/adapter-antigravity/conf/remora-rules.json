@@ -26,7 +26,7 @@
     },
     {
       "id": "prevent-log-explosion",
-      "priority": 90,
+      "priority": 95,
       "hookType": "PreToolUse",
       "conditions": [
         {
@@ -45,6 +45,227 @@
         "reasonCode": "LOG_EXPLOSION",
         "payload": {
           "message": "Access to large log files is restricted to subagents to prevent context explosion."
+        }
+      }
+    },
+    {
+      "id": "prompt-length-limit-deny",
+      "priority": 90,
+      "hookType": "PreToolUse",
+      "conditions": [
+        {
+          "fact": "toolName",
+          "op": "eq",
+          "value": "invoke_subagent"
+        },
+        {
+          "fact": "promptLength",
+          "op": "gt",
+          "value": 1500
+        }
+      ],
+      "action": {
+        "type": "deny",
+        "reasonCode": "PROMPT_LENGTH_LIMIT",
+        "payload": {
+          "message": "Subagent prompt length exceeds the 1500 safety limit."
+        }
+      }
+    },
+    {
+      "id": "prompt-density-violation",
+      "priority": 85,
+      "hookType": "PreToolUse",
+      "conditions": [
+        {
+          "fact": "toolName",
+          "op": "eq",
+          "value": "invoke_subagent"
+        },
+        {
+          "fact": "promptDensityViolation",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "action": {
+        "type": "deny",
+        "reasonCode": "PROMPT_DENSITY_VIOLATION",
+        "payload": {
+          "message": "Subagent Prompt density violation. Prompt length exceeds 500 chars without task.md referencing."
+        }
+      }
+    },
+    {
+      "id": "prevent-actionable-inherit",
+      "priority": 80,
+      "hookType": "PreToolUse",
+      "conditions": [
+        {
+          "fact": "toolName",
+          "op": "eq",
+          "value": "invoke_subagent"
+        },
+        {
+          "fact": "isActionableInherit",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "action": {
+        "type": "deny",
+        "reasonCode": "WORKSPACE_JIT_DENY",
+        "payload": {
+          "message": "Workspace JIT Matrix mismatch. Actionable operations detected in 'inherit' workspace."
+        }
+      }
+    },
+    {
+      "id": "prevent-inherit-write",
+      "priority": 75,
+      "hookType": "PreToolUse",
+      "conditions": [
+        {
+          "fact": "isInherit",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "fact": "isWriteOperation",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "action": {
+        "type": "deny",
+        "reasonCode": "INHERIT_WRITE_DENY",
+        "payload": {
+          "message": "Subagent execution in inherited workspace is restricted from performing physical writes or unsafe commands."
+        }
+      }
+    },
+    {
+      "id": "view-file-limit-exceeded",
+      "priority": 70,
+      "hookType": "PreToolUse",
+      "conditions": [
+        {
+          "fact": "toolName",
+          "op": "eq",
+          "value": "view_file"
+        },
+        {
+          "fact": "view_fileSize",
+          "op": "gt",
+          "value": 15360
+        },
+        {
+          "fact": "view_fileRangeCount",
+          "op": "gt",
+          "value": 300
+        }
+      ],
+      "action": {
+        "type": "deny",
+        "reasonCode": "VIEW_LIMIT_EXCEEDED",
+        "payload": {
+          "message": "Direct reading of files larger than 15KB must specify a line range of 300 lines or less."
+        }
+      }
+    },
+    {
+      "id": "prevent-pb-read",
+      "priority": 65,
+      "hookType": "PreToolUse",
+      "conditions": [
+        {
+          "fact": "toolName",
+          "op": "eq",
+          "value": "view_file"
+        },
+        {
+          "fact": "pbReadAttempted",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "action": {
+        "type": "deny",
+        "reasonCode": "PB_READ_DENIED",
+        "payload": {
+          "message": "Direct reading of Protocol Buffer files is prohibited."
+        }
+      }
+    },
+    {
+      "id": "prevent-db-env-missing",
+      "priority": 60,
+      "hookType": "PreToolUse",
+      "conditions": [
+        {
+          "fact": "toolName",
+          "op": "eq",
+          "value": "invoke_subagent"
+        },
+        {
+          "fact": "hasDbEnvFacts",
+          "op": "eq",
+          "value": false
+        }
+      ],
+      "action": {
+        "type": "deny",
+        "reasonCode": "DB_ENV_MISSING",
+        "payload": {
+          "message": "Missing database environment facts in prompt."
+        }
+      }
+    },
+    {
+      "id": "prevent-duplicate-spawn",
+      "priority": 55,
+      "hookType": "PreToolUse",
+      "conditions": [
+        {
+          "fact": "toolName",
+          "op": "eq",
+          "value": "invoke_subagent"
+        },
+        {
+          "fact": "isDuplicateSpawn",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "action": {
+        "type": "deny",
+        "reasonCode": "DUPLICATE_SPAWN",
+        "payload": {
+          "message": "High-frequency duplicate dispatch detected."
+        }
+      }
+    },
+    {
+      "id": "readonly-turns-exceeded",
+      "priority": 50,
+      "hookType": "PreToolUse",
+      "conditions": [
+        {
+          "fact": "toolName",
+          "op": "eq",
+          "value": "send_message"
+        },
+        {
+          "fact": "readonlySubTurnsExceeded",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "action": {
+        "type": "deny",
+        "reasonCode": "SUBAGENT_CONTEXT_ROT",
+        "payload": {
+          "message": "ReadOnly subagent has exceeded the 4-turn limit."
         }
       }
     }

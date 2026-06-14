@@ -22,7 +22,7 @@ export interface Rule {
 export type Fact = Record<string, any>;
 
 export interface DecisionResult {
-  status: "ALLOW" | "DENY";
+  status: "ALLOW" | "DENY" | "INJECT";
   reasonCode?: string;
   payload?: any;
   platformDirectives?: any;

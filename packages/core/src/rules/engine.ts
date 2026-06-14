@@ -9,7 +9,7 @@ export class RuleEngine {
       if (this.matchesRule(fact, rule)) {
         const action = rule.action;
         return {
-          status: action.type.toUpperCase() as "ALLOW" | "DENY",
+          status: action.type.toUpperCase() as "ALLOW" | "DENY" | "INJECT",
           reasonCode: action.reasonCode,
           payload: action.payload,
           platformDirectives: action.platformDirectives,

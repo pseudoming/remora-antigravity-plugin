@@ -62,6 +62,7 @@ function loadBuiltinAgentPerms(name: string): Record<string, boolean> | null {
 // 2. 元数据解析：从 `transcriptPath` 中切片提取当前子会话 ID，调用 `agentapi get-conversation-metadata` 命令。
 // 3. 只读特工 `Remora_ReadOnly_Extractor` 限制：特许豁免 view_file 大体积日志读取限制；但对其命令行写、构建与测试指令做绝对强拦截保护。
 // 4. 沙盒特工 `Remora_Deep_Diver` 限制放行：特许豁免 view_file 日志体积熔断；且豁免其在分支沙盒内执行测试（test）或构建（build）命令的拦截。
+// 5. 拦截覆盖完整性：只读特工的写/构建/测试指令拦截需覆盖所有命令分支，无论命令是否触发大日志特征。
 
 // ==========================================================
 // 设计原理二：View File 累加器与主干上下文防腐 (Anti-Context-Rot)
@@ -96,14 +97,25 @@ function isPathSensitive(target: string): boolean {
 }
 
 export function main(context: Record<string, unknown>): Record<string, unknown> {
+  let hardcodedResult: Record<string, unknown> = { decision: "allow" };
   try {
-    globalRuleRunner.runDarkRead("PreToolUse", context);
-  } catch (e) {}
-  try {
-    return _main(context);
-  } catch {
-    return { decision: "allow" };
+    hardcodedResult = _main(context);
+  } catch (e) {
+    // pass
   }
+
+  try {
+    const engineResult = globalRuleRunner.runActiveBlock("PreToolUse", context);
+    const hardDec = (hardcodedResult.decision as string || "allow").toLowerCase();
+    const engDec = (engineResult.status as string || "allow").toLowerCase();
+    if (hardDec !== engDec) {
+      console.error(`[RuleRunner Mismatch] Decision mismatch detected. Hardcoded: ${hardDec.toUpperCase()}, Engine: ${engDec.toUpperCase()}, Context: ${JSON.stringify(context)}`);
+    }
+  } catch (e: any) {
+    console.error(`[RuleRunner Mismatch] Silent evaluation failed: ${e.message}`);
+  }
+
+  return hardcodedResult;
 }
 
 function _main(context: Record<string, unknown>): Record<string, unknown> {
@@ -650,6 +662,19 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
       } else {
         // 不含大日志特征的常规命令审计
         if (decision === "deny") {
+          if (isReadonlySub) {
+            // 中文翻译：[只读安全拦截] 限制只读特工。Remora_ReadOnly_Extractor 仅被授权进行只读检索，严禁运行 any 物理写操作、构建或测试命令！
+            // 英文对照：⛔ REMORA SAFETY INTERCEPT [READONLY]: Remora_ReadOnly_Extractor is strictly read-only.\nACTION REQUIRED: Do not run write/test/build commands!
+            return {
+              decision: "deny",
+              reason: makeDenyReason(
+                "READONLY",
+                "Remora_ReadOnly_Extractor is strictly read-only.",
+                "Do not run write/test/build commands!"
+              ),
+            };
+          }
+
           // 非只读子代理在隔离沙盒内无条件放行所有命令，防止 DELEGATION 消息误发给子代理造成自指悖论。
           // 只读特工（Remora_ReadOnly_Extractor）不进入此分支——其 enable_write_tools=false 决定它根本调不到 run_command。
           // 主代理继续走下游 DELEGATION BLOCKED 出口，提示委派给子代理。
