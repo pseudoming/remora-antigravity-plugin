@@ -12,6 +12,14 @@ vi.mock("node:fs", async (importOriginal) => {
   };
 });
 
+vi.mock("@remora/core", async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  return {
+    ...actual,
+    stripMarkdownCodeBlocks: vi.fn((str) => str),
+  };
+});
+
 describe("AntigravityFactExtractor Lazy Load & Sandbox Escape Fix", () => {
   it("should lazy load view_fileSize and view_fileRangeCount facts and avoid unnecessary I/O", () => {
     const statSpy = vi.mocked(fs.statSync);

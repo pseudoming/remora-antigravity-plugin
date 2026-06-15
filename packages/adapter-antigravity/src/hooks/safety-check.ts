@@ -104,28 +104,33 @@ function isPathSensitive(target: string): boolean {
 }
 
 export function main(context: Record<string, unknown>): Record<string, unknown> {
-  let hardcodedResult: Record<string, unknown> = { decision: "allow" };
+  // 1. 先跑无副作用的引擎基础防御
+  let engineResult;
   try {
-    hardcodedResult = _main(context);
-  } catch (e) {
-    // pass
-  }
-
-  try {
-    const engineResult = globalRuleRunner.runActiveBlock("PreToolUse", context);
-    const hardDec = (hardcodedResult.decision as string || "allow").toLowerCase();
-    const engDec = (engineResult.status as string || "allow").toLowerCase();
-    if (hardDec !== engDec) {
-      console.error(`[RuleRunner Mismatch] Decision mismatch detected. Hardcoded: ${hardDec.toUpperCase()}, Engine: ${engDec.toUpperCase()}, Context: ${JSON.stringify(context)}`);
+    engineResult = globalRuleRunner.runActiveBlock("PreToolUse", context);
+    if ((engineResult.status as string || "allow").toUpperCase() === "DENY") {
+      return {
+        decision: "deny",
+        reason: engineResult.payload?.message || "Blocked by Rule Engine",
+        decision_reason: engineResult.payload?.message || "Blocked by Rule Engine"
+      };
     }
   } catch (e: any) {
-    console.error(`[RuleRunner Mismatch] Silent evaluation failed: ${e.message}`);
+    console.error(`[RuleRunner] Evaluation failed, fallback to DENY (Fail-Closed): ${e.message}`);
+    return { decision: "deny", reason: "Rule engine exception." };
   }
 
-  return hardcodedResult;
+  // 2. 引擎跑通后，跑有副作用/复杂的硬编码动态防御（JIT 注入、命令审查）
+  try {
+    const postResult = checkPost75Rules(context);
+    return postResult || { decision: "allow" };
+  } catch (e: any) {
+    console.error(`[PostFilter] Exception in checkPost75Rules: ${e.message}`);
+    return { decision: "deny", reason: "Internal error in security post-filters." };
+  }
 }
 
-function _main(context: Record<string, unknown>): Record<string, unknown> {
+function checkPost75Rules(context: Record<string, unknown>): Record<string, unknown> | undefined {
   const toolCall = context["toolCall"] as Record<string, unknown> | undefined;
   const toolName = (toolCall?.["name"] as string) ?? "";
   const args = (toolCall?.["args"] as Record<string, unknown>) ?? {};
@@ -151,42 +156,44 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
 
   const subagentType = getSubagentType(transcriptPath);
 
-  const isSub = subagentType !== null;
-  const isReadonlySub = subagentType === "Remora_ReadOnly_Extractor";
-  const isDeepDiverSub = subagentType === "Remora_Deep_Diver";
+  // Duplicate spawn rate limiter (Phase 75+)
+  if (toolName === "invoke_subagent") {
+    let subagents = args["Subagents"];
+    if (Array.isArray(subagents)) {
+      for (const req of subagents) {
+        const typeName = req["TypeName"];
+        const role = req["Role"];
+        const signature = typeName + "::" + role;
 
-  // --------------------------------------------------------
-  // 针对 send_message 的只读子代理回合数限制拦截 (Phase 73)
-  // --------------------------------------------------------
-  if (toolName === "send_message") {
-    const recipient = (args["Recipient"] as string) ?? "";
-    if (recipient) {
-      let subagentType = getHookState(convId, 0, `subagent_type_${recipient}`);
-      if (!subagentType) {
-        try {
-          const resolvedType = getSubagentTypeByConvId(recipient);
-          if (resolvedType) {
-            subagentType = resolvedType;
-            setHookState(convId, 0, `subagent_type_${recipient}`, subagentType);
-          }
-        } catch (e) {
-          // pass
-        }
-      }
-      if (subagentType === "Remora_ReadOnly_Extractor") {
-        const stateKey = `subagent_turn_limit_${recipient}`;
-        const currentCount = parseInt(getHookState(convId, 0, stateKey) || "0", 10);
-        if (currentCount >= 4) {
+        let historyStr = getHookState(convId, currentTurnIdx, "subagent_spawns");
+        let history = [];
+        try { if (historyStr) history = JSON.parse(historyStr); } catch(e) {}
+        if (!Array.isArray(history)) history = [];
+
+        const now = Date.now();
+        const recentSpawns = history.filter((h: any) => h.signature === signature && now - h.timestamp < 3 * 60 * 1000);
+        
+        if (recentSpawns.length > 0) {
           return {
             decision: "deny",
-            reason: `⛔ [SUBAGENT_CONTEXT_ROT] ReadOnly subagent ${recipient} has exceeded the 4-turn limit. Please kill and respawn a new one to prevent context pollution.`,
-            decision_reason: `⛔ [SUBAGENT_CONTEXT_ROT] ReadOnly subagent ${recipient} has exceeded the 4-turn limit. Please kill and respawn a new one to prevent context pollution.`
+            reason: "⛔ [REMORA SAFETY INTERCEPT] High-frequency duplicate dispatch. Spawning '" + role + "' within 3 minutes for identical verification/extraction. ACTION REQUIRED: Please merge these tasks into a single subagent invocation (or use a self-contained verifier instruction in the developer prompt) to avoid cold startup latency."
           };
         }
-        setHookState(convId, 0, stateKey, (currentCount + 1).toString());
+
+        const newHistory = history.filter((h: any) => now - h.timestamp < 10 * 60 * 1000);
+        newHistory.push({ signature, timestamp: now });
+        setHookState(convId, currentTurnIdx, "subagent_spawns", JSON.stringify(newHistory));
       }
     }
   }
+
+
+  
+
+
+  const isSub = subagentType !== null;
+  const isReadonlySub = subagentType === "Remora_ReadOnly_Extractor";
+  const isDeepDiverSub = subagentType === "Remora_Deep_Diver";
 
   // Detect Workspace: "inherit" write block
   const isWriteTool = ["write_to_file", "replace_file_content", "multi_replace_file_content"].includes(toolName);
@@ -219,20 +226,7 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
     workspaceEnv === "inherit" ||
     (!workspaceEnv && !isBranch && !process.env.VITEST && process.env.NODE_ENV !== "test")
   );
-
   const isMergerSub = subagentType === "Remora_Merger";
-  if (isInherit && isWriteOperation && !isMergerSub) {
-    // 中文翻译：[继承写操作拦截] 阻断子代理在继承主干工作区中执行物理写或测试/构建高危操作。请将子代理委派在隔离沙盒内运行！
-    // 英文对照：⛔ REMORA SAFETY INTERCEPT [INHERIT_WRITE_DENY]: Subagent execution in inherited workspace is restricted from performing physical writes or unsafe commands.
-    return {
-      decision: "deny",
-      reason: makeDenyReason(
-        "INHERIT_WRITE_DENY",
-        "Subagent execution in inherited workspace is restricted from performing physical writes or unsafe commands.",
-        "Please delegate the subagent under Workspace: branch to execute this operation."
-      ),
-    };
-  }
 
   // --------------------------------------------------------
   // Anti-Context-Rot: 统一的返回模板
@@ -277,92 +271,6 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
         return {
           decision: "deny",
           reason: `⛔ [REMORA SAFETY INTERCEPT] Subagent Prompt syntax truncation detected. ${syntaxResult.errorReason}. Action required: Verify prompt completeness.`,
-        };
-      }
-
-      // 中文翻译：[提示词长度极限拦截] 运行 Phase 68 对超过 1500 字符的提示词进行底线防御拦截。
-      // Rule 1: Two-Tier Prompt Density Check (Threshold 2: 1500 Chars)
-      if (promptStr.length > 1500) {
-        const [isOverLimit, deny] = enforcePromptLengthLimit(promptStr);
-        if (isOverLimit) {
-          return {
-            decision: "deny",
-            reason: makeDenyReason(deny!.prefix, deny!.message, deny!.action_tip),
-          };
-        }
-      }
-
-      // 中文翻译：[子特工提示词密度拦截] 检测到子特工提示词长度超限（500字符）。请将详细背景和上下文写入任务定义文件（例如 'scratch/task_<convId>.md'），并在下发的提示词中引用该文件路径。
-      // Rule 1: Two-Tier Prompt Density Check (Threshold 1: 500 Chars)
-      if (promptStr.length > 500 && !promptStr.includes("task.md") && !promptStr.includes("scratch/")) {
-        return {
-          decision: "deny",
-          reason: `⛔ [REMORA SAFETY INTERCEPT] Subagent Prompt density violation. Prompt length is ${promptStr.length} chars (limit: 500 chars). ACTION REQUIRED: Please write details/context into a task definition file (e.g., 'scratch/task_<convId>.md') using 'write_to_file', and reference the file path in your subagent Prompt.`,
-        };
-      }
-
-      // 中文翻译：[工作区实时矩阵拦截] 在 'inherit' 工作区检测到写操作或测试/构建等行为。代码修改必须将 Workspace 设置为 'branch'，编译与回归测试必须将 Workspace 设置为 'share'。
-      // Rule 2: Workspace JIT Actionable Phrase Matrix Check
-      if (ws === "inherit") {
-        const actionableRegex = /write_to_file|replace_file_content|git commit|git add|git am|npm install|npm run build|vitest run|npm run test|npx vitest|modify packages\/|edit src\//;
-        if (actionableRegex.test(promptStr)) {
-          return {
-            decision: "deny",
-            reason: `⛔ [REMORA SAFETY INTERCEPT] Workspace JIT Matrix mismatch. Actionable operations detected in 'inherit' workspace. ACTION REQUIRED: For code modifications, set Workspace to 'branch'. For building and regression testing, set Workspace to 'share'.`,
-          };
-        }
-      }
-
-      // 中文翻译：[数据库事实注入拦截] 提示词中缺少必要的数据库环境变量。您必须将 (a) 'REMORA_DB_PATH'、(b) 'project_uuid' 和 (c) 当前插件根路径注入到子特工提示词中，以防止运行时初始化崩溃。
-      // Rule 3: Database Facts Injection Verification
-      const roleLower = role.toLowerCase();
-      const triggerRole = ["db", "database", "recall", "sqlite", "compactor"].some(kw => roleLower.includes(kw));
-      const triggerPrompt = ["remora_memory.db", "conversation.db", "remora-recall"].some(kw => promptStr.includes(kw));
-      if (triggerRole || triggerPrompt) {
-        const pluginRoot = findPluginRoot();
-        const hasDbPath = promptStr.includes("REMORA_DB_PATH");
-        const hasProjectUuid = promptStr.includes("project_uuid");
-        const hasPluginRoot = promptStr.includes(pluginRoot);
-        if (!hasDbPath || !hasProjectUuid || !hasPluginRoot) {
-          return {
-            decision: "deny",
-            reason: `⛔ [REMORA SAFETY INTERCEPT] Missing database environment facts in prompt. ACTION REQUIRED: You MUST inject (a) 'REMORA_DB_PATH', (b) 'project_uuid', and (c) findPluginRoot() current path, into the subagent Prompt to prevent runtime initialization crash.`,
-          };
-        }
-      }
-
-      // 中文翻译：[高频重复派发拦截] 检测到 3 分钟内重复派发了相同角色或相同提示词哈希的子特工。请合并这些任务或在提示词中使用自包含的校验指令以避免冷启动延迟。
-      // Rule 4: Duplicate Subagent Spawn Rate Limiter
-      const promptHash = promptStr.slice(0, 100);
-      const now = Date.now();
-      const duplicate = history.find((entry: any) => {
-        const isSameRole = role && entry.role === role;
-        const isSameHash = entry.promptHash === promptHash;
-        const isWithinWindow = (now - entry.timestamp) <= 180000;
-        return (isSameRole || isSameHash) && isWithinWindow;
-      });
-      if (duplicate) {
-        return {
-          decision: "deny",
-          reason: `⛔ [REMORA SAFETY INTERCEPT] High-frequency duplicate dispatch. Spawning '${role}' within 3 minutes for identical verification/extraction. ACTION REQUIRED: Please merge these tasks into a single subagent invocation (or use a self-contained verifier instruction in the developer prompt) to avoid cold startup latency.`,
-        };
-      }
-      history.push({
-        timestamp: now,
-        role,
-        promptHash,
-      });
-
-      const [isViolation, deny2] = enforceSandboxWorkspace(
-        tName,
-        ws,
-        "Remora_Deep_Diver",
-        ["branch", "share"]
-      );
-      if (isViolation) {
-        return {
-          decision: "deny",
-          reason: makeDenyReason(deny2!.prefix, deny2!.message, deny2!.action_tip),
         };
       }
     }
@@ -474,6 +382,14 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
   // --------------------------------------------------------
   // 针对 view_file 的拦截
   // --------------------------------------------------------
+    if (toolName === "send_message") {
+      const recipient = (args["Recipient"] as string) ?? "";
+      if (recipient) {
+        const stateKey = `subagent_turn_limit_${recipient}`;
+        const currentCount = parseInt(getHookState(convId, 0, stateKey) || "0", 10);
+        setHookState(convId, 0, stateKey, String(currentCount + 1));
+      }
+    }
   if (toolName === "view_file") {
     const targetFile = (args["AbsolutePath"] as string) ?? "";
     if (targetFile) {
@@ -492,57 +408,6 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
           };
         } else if (isUnifiedLimitApproaching(currentUnified)) {
           console.warn("[Warning] [ANTI-ROT_ALERT]");
-        }
-      }
-
-      // 1. 敏感后缀强力拦截 (大日志直接阻断)
-      if (isPathSensitive(targetFile)) {
-        if (isReadonlySub) {
-          // pass  // 只读特工大日志读取显式放行
-        } else if (!isSub) {
-          return { decision: "deny", reason: rotReason };
-        }
-      }
-
-      // 3. 针对主干的 view_file 代码/文本文件区间硬拦截 (防止全量读取 15KB 以上文件导致上下文爆炸)
-      if (!isSub && !isPathSensitive(targetFile)) {
-        try {
-          if (fs.existsSync(targetFile)) {
-            const fileStats = fs.statSync(targetFile);
-            if (fileStats.isFile() && fileStats.size > 15 * 1024) {
-              const startLine = args["StartLine"];
-              const endLine = args["EndLine"];
-              let block = false;
-              let reasonSuffix = "";
-              
-              if (startLine === undefined || endLine === undefined) {
-                block = true;
-                reasonSuffix = "StartLine or EndLine parameters are missing (defaulting to full file read).";
-              } else {
-                const s = typeof startLine === "number" ? startLine : parseInt(String(startLine), 10);
-                const e = typeof endLine === "number" ? endLine : parseInt(String(endLine), 10);
-                if (isNaN(s) || isNaN(e) || (e - s + 1) > 300) {
-                  block = true;
-                  reasonSuffix = `Requested line range (${s} to ${e}) exceeds the 300-line safety limit.`;
-                }
-              }
-              
-              if (block) {
-                // 中文翻译：[文件大小限制拦截] 试图在主干中全量读取超过 15KB 的源码文件或单次读取超过 300 行。
-                // 英文对照：⛔ REMORA SAFETY INTERCEPT [VIEW_LIMIT_EXCEEDED]: Direct reading of files larger than 15KB must specify a line range of 300 lines or less.
-                return {
-                  decision: "deny",
-                  reason: makeDenyReason(
-                    "VIEW_LIMIT_EXCEEDED",
-                    `Direct reading of files larger than 15KB must specify a line range of 300 lines or less.`,
-                    reasonSuffix + " Please specify StartLine and EndLine to view a sub-range of the file."
-                  ),
-                };
-              }
-            }
-          }
-        } catch {
-          // pass
         }
       }
 
@@ -784,20 +649,8 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
         if (isSub && !isReadonlySub) {
           return { decision: "allow" };
         }
-
-
-        if (category === "pb_read") {
-          // 中文翻译：[PB 读取拦截] 严禁直接读取或解包 .pb 二进制文件。请使用 remora-recall CLI 或 CDAL 接口提取历史摘要。
-          // 英文对照：Direct reading or unpacking of .pb binary files is strictly prohibited. / Please use remora-recall CLI or CDAL interface to extract historical summaries.
-          return {
-            decision: "deny",
-            reason: makeDenyReason(
-              "PB_READ_DENY",
-              "Direct reading or unpacking of .pb binary files is strictly prohibited.",
-              "Please use remora-recall CLI or CDAL interface to extract historical summaries."
-            ),
-          };
-        } else if (category === "git_escape") {
+        if (decision === "deny") {
+          if (category === "git_escape") {
           // 中文翻译：[Git 转义拦截] 检测到 Git 提交消息中包含换行符或连续星号，已被硬拦截以防止字符转义。
           // 英文对照：Git commit message containing newline characters or consecutive asterisks is blocked to prevent escape vulnerabilities.
           return {
@@ -861,6 +714,7 @@ function _main(context: Record<string, unknown>): Record<string, unknown> {
               "Please delegate to a subagent under (Workspace: 'branch')!"
             ),
           };
+        }
         }
       } else {
         // Blast radius check — once per turn for non-subagent commands.

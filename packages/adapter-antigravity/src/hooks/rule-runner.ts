@@ -9,7 +9,9 @@ import {
   isRotSensitivePath,
   inspectCommand,
   getHookState,
-  setHookState
+  setHookState,
+  stripMarkdownCodeBlocks,
+  readMode
 } from "@remora/core";
 import { getSubagentType, getSubagentTypeByConvId } from "../bridge/subagent";
 import { ConversationDataAccessLayer } from "../bridge/conversation";
@@ -76,10 +78,11 @@ export class AntigravityFactExtractor implements IFactExtractor {
       for (const sub of subagents) {
         const promptStr = (sub["Prompt"] as string) ?? "";
         const ws = (sub["Workspace"] as string) ?? "inherit";
-        if (promptStr.length > promptLength) {
-          promptLength = promptStr.length;
+        const cleanPromptLength = stripMarkdownCodeBlocks(promptStr).length;
+        if (cleanPromptLength > promptLength) {
+          promptLength = cleanPromptLength;
         }
-        if (promptStr.length > 500 && !promptStr.includes("task.md") && !promptStr.includes("scratch/")) {
+        if (cleanPromptLength > 500 && !promptStr.includes("task.md") && !promptStr.includes("scratch/")) {
           promptDensityViolation = true;
         }
         if (ws === "inherit") {
@@ -96,7 +99,16 @@ export class AntigravityFactExtractor implements IFactExtractor {
     const absolutePath = (args["AbsolutePath"] as string) ?? "";
     const pbReadAttempted = absolutePath.endsWith(".pb") || absolutePath.includes(".pb");
 
+    const isReadOnlySubagent = subagentType === "Remora_ReadOnly_Extractor";
+    const isMergerSubagent = subagentType === "Remora_Merger";
+    const isRelaxMode = readMode(convId, "strict") === "relax";
+    const isMainContext = !subagentType;
+
     const facts: Fact = {
+      isReadOnlySubagent,
+      isMergerSubagent,
+      isMainContext,
+      isRelaxMode,
       toolName,
       isSandboxEscaped,
       promptLength,
@@ -275,7 +287,9 @@ export class RuleRunner {
       const pluginRoot = findPluginRoot();
       const rulesPath = path.join(pluginRoot, "conf", "remora-rules.json");
       if (fs.existsSync(rulesPath)) {
+        console.log("TRYING TO LOAD RULES FROM:", rulesPath);
         const raw = fs.readFileSync(rulesPath, "utf-8");
+        console.log("LOADED RAW:", typeof raw, raw ? raw.substring(0, 50) : raw);
         const parsed = JSON.parse(raw);
         this.rules = parsed.rules || [];
       }

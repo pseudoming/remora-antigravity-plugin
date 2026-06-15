@@ -29,16 +29,9 @@
       "priority": 95,
       "hookType": "PreToolUse",
       "conditions": [
-        {
-          "fact": "toolName",
-          "op": "eq",
-          "value": "view_file"
-        },
-        {
-          "fact": "isSensitiveLog",
-          "op": "eq",
-          "value": true
-        }
+        { "fact": "toolName", "op": "eq", "value": "view_file" },
+        { "fact": "isSensitiveLog", "op": "eq", "value": true },
+        { "fact": "isMainContext", "op": "eq", "value": true }
       ],
       "action": {
         "type": "deny",
@@ -134,6 +127,11 @@
           "fact": "isWriteOperation",
           "op": "eq",
           "value": true
+        },
+        {
+          "fact": "isMergerSubagent",
+          "op": "neq",
+          "value": true
         }
       ],
       "action": {
@@ -150,6 +148,11 @@
       "hookType": "PreToolUse",
       "conditions": [
         {
+          "fact": "isMainContext",
+          "op": "eq",
+          "value": true
+        },
+        {
           "fact": "toolName",
           "op": "eq",
           "value": "view_file"
@@ -163,6 +166,11 @@
           "fact": "view_fileRangeCount",
           "op": "gt",
           "value": 300
+        },
+        {
+          "fact": "isRelaxMode",
+          "op": "neq",
+          "value": true
         }
       ],
       "action": {
@@ -218,30 +226,6 @@
         "reasonCode": "DB_ENV_MISSING",
         "payload": {
           "message": "Missing database environment facts in prompt."
-        }
-      }
-    },
-    {
-      "id": "prevent-duplicate-spawn",
-      "priority": 55,
-      "hookType": "PreToolUse",
-      "conditions": [
-        {
-          "fact": "toolName",
-          "op": "eq",
-          "value": "invoke_subagent"
-        },
-        {
-          "fact": "isDuplicateSpawn",
-          "op": "eq",
-          "value": true
-        }
-      ],
-      "action": {
-        "type": "deny",
-        "reasonCode": "DUPLICATE_SPAWN",
-        "payload": {
-          "message": "High-frequency duplicate dispatch detected."
         }
       }
     },

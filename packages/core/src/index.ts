@@ -26,6 +26,7 @@ export {
 
 // Safety policy
 export {
+  stripMarkdownCodeBlocks,
   enforcePromptLengthLimit,
   enforceSandboxWorkspace,
   isRotSensitiveFile,
