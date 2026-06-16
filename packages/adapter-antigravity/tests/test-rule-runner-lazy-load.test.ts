@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { AntigravityFactExtractor } from "../src/hooks/rule-runner";
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 vi.mock("node:fs", async (importOriginal) => {
 	const actual = await importOriginal<typeof fs>();
@@ -26,12 +27,15 @@ describe("AntigravityFactExtractor Lazy Load & Sandbox Escape Fix", () => {
 		statSpy.mockClear();
 
 		const extractor = new AntigravityFactExtractor();
+		const tempFile = path.join(__dirname, ".test-view-file-size");
+		fs.writeFileSync(tempFile, "hello world test content padding for view_fileSize test", "utf-8");
+
 		const rawPayload = {
 			transcriptPath: "/brain/test-session-123/",
 			toolCall: {
 				name: "view_file",
 				args: {
-					AbsolutePath: "/home/agent/wsl_code/remora-plugin/plugin.json",
+					AbsolutePath: tempFile,
 				},
 			},
 		};
@@ -45,6 +49,8 @@ describe("AntigravityFactExtractor Lazy Load & Sandbox Escape Fix", () => {
 		const size = facts.view_fileSize;
 		expect(size).toBeGreaterThan(0);
 		expect(statSpy).toHaveBeenCalled();
+
+		fs.unlinkSync(tempFile);
 	});
 
 	it("should correctly handle isSandboxEscaped according to subagent TypeName (fix deep diver and allow readonly)", () => {

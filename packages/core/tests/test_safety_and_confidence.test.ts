@@ -249,7 +249,7 @@ describe("TestFactualConfidence", () => {
 			// 3. Call and check that it prints warning and returns True instead of throwing
 			let threw = false;
 			try {
-				const result = validateIdInheritance("p1", newTopics);
+				const result = validateIdInheritance("p1", newTopics, conn);
 				expect(result).toBe(true);
 			} catch (_e) {
 				threw = true;
