@@ -21,7 +21,7 @@ import {
 	upsertTopic,
 } from "@remora/core";
 import { backfillMessageTopicIds, updateWatermark } from "@remora/core";
-import { getDbPath } from "@remora/core";
+import { getDbPath, SYSTEM_POLICY } from "@remora/core";
 import {
 	getActiveConversations,
 	isSubagentSession,
@@ -36,7 +36,7 @@ const CONV_MARKER_FILE = path.join(
 	"compactor_conversation_id.txt",
 );
 const BRAIN_DIR = getBrainDir();
-const MAX_EXECUTION_TIME = 300;
+
 
 export class AgentApiError extends Error {
 	constructor(message: string) {
@@ -72,7 +72,11 @@ export function getOrCreateConversation(prompt: string): string {
 				}
 			} else {
 				try {
-					sendMessage(convId, prompt, 180);
+					sendMessage(
+						convId,
+						prompt,
+						SYSTEM_POLICY.ORCHESTRATION.MAX_EXECUTION_SEC,
+					);
 					const reply = cdal.getLatestPlannerResponse();
 					return reply || "";
 				} catch (e: any) {
@@ -89,7 +93,11 @@ export function getOrCreateConversation(prompt: string): string {
 		const currentDateStr = new Date().toISOString().slice(0, 10);
 		const initPrompt =
 			`# Remora Memory Compactor (${currentDateStr})\n\n` + prompt;
-		const resp: any = createConversation(initPrompt, 180, "flash");
+		const resp: any = createConversation(
+			initPrompt,
+			SYSTEM_POLICY.ORCHESTRATION.MAX_EXECUTION_SEC,
+			"flash",
+		);
 
 		const reply = resp?.response?.newConversation?.reply || "";
 		const newConvId = resp?.response?.newConversation?.conversationId || "";
@@ -190,7 +198,7 @@ export function processSessions(startTime: number): void {
 	try {
 		const activeSessions = getActiveConversations();
 		for (const session of activeSessions) {
-			if (Date.now() / 1000 - startTime > MAX_EXECUTION_TIME) {
+			if (Date.now() / 1000 - startTime > SYSTEM_POLICY.ORCHESTRATION.MAX_EXECUTION_SEC) {
 				console.error("Max execution time reached, stopping.");
 				break;
 			}

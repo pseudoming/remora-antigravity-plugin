@@ -15,6 +15,7 @@ import {
 	updateWatermark,
 	ensureWatermark,
 	formatTimestamp,
+	SYSTEM_POLICY,
 } from "@remora/core";
 
 import { isSubagentSession } from "./scan-sessions";
@@ -99,7 +100,7 @@ export function readIncrementalLogs(
 					content &&
 					(stepType === "USER_INPUT" || stepType === "PLANNER_RESPONSE")
 				) {
-					const snippet = `[msg_${msgId}] ${content.slice(0, 500)}`;
+					const snippet = `[msg_${msgId}] ${content.slice(0, SYSTEM_POLICY.DISPLAY.WARM_SNIPPET_CHARS)}`;
 					if (totalLength < MAX_PROMPT_LENGTH) {
 						newSnippets.push(snippet);
 						totalLength += snippet.length;

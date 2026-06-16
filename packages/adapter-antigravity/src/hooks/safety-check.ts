@@ -15,6 +15,7 @@ import {
 	estimateGrepReadBytes,
 	isUnifiedLimitExceeded,
 	isUnifiedLimitApproaching,
+	SYSTEM_POLICY,
 } from "@remora/core";
 import { accumulate, getStats } from "../bridge/stats";
 import { getSubagentType } from "../bridge/subagent";
@@ -229,7 +230,9 @@ function checkDuplicateSpawnRule(
 			const now = Date.now();
 			const recentSpawns = history.filter(
 				(h: any) =>
-					h.signature === signature && now - h.timestamp < 3 * 60 * 1000,
+					h.signature === signature &&
+					now - h.timestamp <
+						SYSTEM_POLICY.ORCHESTRATION.REPEAT_SPAWN_WINDOW_MS,
 			);
 
 			if (recentSpawns.length > 0) {

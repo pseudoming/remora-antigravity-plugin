@@ -68,6 +68,7 @@ vi.mock("@remora/core", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("@remora/core")>();
 	return {
 		...actual,
+		SYSTEM_POLICY: { ORCHESTRATION: { REPEAT_SPAWN_WINDOW_MS: 180000, MAX_EXECUTION_SEC: 300, STREAM_HISTORY_DEPTH: 300 }, DISPLAY: { WARM_SNIPPET_CHARS: 500 } },
 		getPlanChangeTime: coreMocks.getPlanChangeTime,
 		getUserMessagesAfter: coreMocks.getUserMessagesAfter,
 		enqueueEvent: coreMocks.enqueueEvent,

@@ -13,6 +13,7 @@ import {
 	getProjectUuidByConv,
 	watermarkExists,
 	parseSqliteTimestamp,
+	SYSTEM_POLICY,
 } from "@remora/core";
 import { getSysUptime, cleanWhitelist } from "../sandbox/zombie-linux";
 import { getParentConvId } from "../bridge/subagent";
@@ -230,10 +231,12 @@ function _main(context?: any): {
 			const starttime = parseInt(statData[21], 10);
 			const elapsedSeconds = sysUptime - starttime / clkTck;
 
-			// Set dual thresholds: 60s for short commands, 180s for integration tests
+			// Set dual thresholds
 			const isIntegrationTest =
 				/test|vitest|jest|mocha|pytest|integration/i.test(cmdline);
-			const threshold = isIntegrationTest ? 180 : 60;
+			const threshold = isIntegrationTest
+				? SYSTEM_POLICY.SANDBOX.HEAVY_TOOL_TIMEOUT_SEC
+				: SYSTEM_POLICY.SANDBOX.NORMAL_TOOL_TIMEOUT_SEC;
 
 			if (isProcessExpired(elapsedSeconds, threshold)) {
 				if (whitelistedPids.has(pid)) {

@@ -568,6 +568,7 @@ vi.mock("@remora/core", () => {
 	): void {}
 
 	return {
+		SYSTEM_POLICY: { ORCHESTRATION: { REPEAT_SPAWN_WINDOW_MS: 180000, MAX_EXECUTION_SEC: 300, STREAM_HISTORY_DEPTH: 300 }, DISPLAY: { WARM_SNIPPET_CHARS: 500 } },
 		getDbPath: () => testDbPath.value,
 		checkDbExists: () => {
 			try {
@@ -814,7 +815,7 @@ describe("getOrCreateConversation", () => {
 		expect(mockSendMessage).toHaveBeenCalledWith(
 			"existing-conv-id",
 			"test prompt",
-			180,
+			300,
 		);
 	});
 

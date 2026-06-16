@@ -18,6 +18,7 @@ import {
 	setHookState,
 	stripMarkdownCodeBlocks,
 	readMode,
+	SYSTEM_POLICY,
 } from "@remora/core";
 import { getSubagentType, getSubagentTypeByConvId } from "../bridge/subagent";
 import { ConversationDataAccessLayer } from "../bridge/conversation";
@@ -289,7 +290,9 @@ export class AntigravityFactExtractor implements IFactExtractor {
 							const duplicate = history.find((entry: any) => {
 								const isSameRole = role && entry.role === role;
 								const isSameHash = entry.promptHash === promptHash;
-								const isWithinWindow = now - entry.timestamp <= 180000;
+								const isWithinWindow =
+									now - entry.timestamp <=
+									SYSTEM_POLICY.ORCHESTRATION.REPEAT_SPAWN_WINDOW_MS;
 								return (isSameRole || isSameHash) && isWithinWindow;
 							});
 							if (duplicate) {

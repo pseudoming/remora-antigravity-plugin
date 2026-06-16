@@ -1,19 +1,13 @@
 import { existsSync, statSync, readdirSync } from "node:fs";
 
+import { SYSTEM_POLICY } from "./policy";
+
 const ROT_SENSITIVE_SUFFIXES: readonly string[] = [".jsonl", ".log", ".sqlite"];
 const ROT_SENSITIVE_PATH_FRAGMENTS: readonly string[] = [
 	"/.system_generated",
 	"/logs",
 ];
-const ACCUMULATED_SOURCE_LIMIT = 400 * 1024;
-const ACCUMULATED_DATA_LIMIT = 150 * 1024;
 const LINE_ESTIMATE_BYTES = 50;
-
-export const UNIFIED_READ_WARN_LIMIT = 80 * 1024;
-export const UNIFIED_READ_DENY_LIMIT = 160 * 1024;
-export const GREP_PRE_ALLOCATION_DIR_DEFAULT = 15 * 1024;
-export const GREP_PRE_ALLOCATION_DIR_SMALL = 5 * 1024;
-export const GREP_PRE_ALLOCATION_FILE_MAX = 10 * 1024;
 
 export interface DenyReason {
 	prefix: string;
@@ -38,13 +32,13 @@ export function estimateGrepReadBytes(
 	fileCount?: number,
 ): number {
 	if (!existsSync(searchPath)) {
-		return GREP_PRE_ALLOCATION_DIR_DEFAULT;
+		return SYSTEM_POLICY.GREP.DIR_DEFAULT_BYTES;
 	}
 	try {
 		const stats = statSync(searchPath);
 		if (stats.isFile()) {
 			const estimated = Math.floor(stats.size * 0.5);
-			return Math.min(estimated, GREP_PRE_ALLOCATION_FILE_MAX);
+			return Math.min(estimated, SYSTEM_POLICY.GREP.FILE_MAX_BYTES);
 		} else if (stats.isDirectory()) {
 			let count = fileCount;
 			if (count === undefined) {
@@ -56,22 +50,22 @@ export function estimateGrepReadBytes(
 				}
 			}
 			if (count !== undefined && count < 5) {
-				return GREP_PRE_ALLOCATION_DIR_SMALL;
+				return SYSTEM_POLICY.GREP.DIR_SMALL_BYTES;
 			}
-			return GREP_PRE_ALLOCATION_DIR_DEFAULT;
+			return SYSTEM_POLICY.GREP.DIR_DEFAULT_BYTES;
 		}
 	} catch {
 		// pass
 	}
-	return GREP_PRE_ALLOCATION_DIR_DEFAULT;
+	return SYSTEM_POLICY.GREP.DIR_DEFAULT_BYTES;
 }
 
 export function isUnifiedLimitExceeded(bytes: number): boolean {
-	return bytes > UNIFIED_READ_DENY_LIMIT;
+	return bytes > SYSTEM_POLICY.SAFETY.FILE_READ_DENY_BYTES;
 }
 
 export function isUnifiedLimitApproaching(bytes: number): boolean {
-	return bytes > UNIFIED_READ_WARN_LIMIT;
+	return bytes > SYSTEM_POLICY.SAFETY.FILE_READ_WARN_BYTES;
 }
 
 export function stripMarkdownCodeBlocks(text: string): string {
@@ -86,7 +80,7 @@ export function stripMarkdownCodeBlocks(text: string): string {
  */
 export function enforcePromptLengthLimit(
 	prompt: string,
-	maxChars: number = 1500,
+	maxChars: number = SYSTEM_POLICY.SAFETY.MAX_PROMPT_CHARS,
 ): [boolean, DenyReason | null] {
 	const stripped = stripMarkdownCodeBlocks(prompt);
 	if (stripped.length > maxChars) {
@@ -178,8 +172,8 @@ export function estimateReadBytes(
  */
 export function isAccumulatedLimitExceeded(stats: AccumulatedStats): boolean {
 	return (
-		stats.accumulated_source_bytes > ACCUMULATED_SOURCE_LIMIT ||
-		stats.accumulated_data_bytes > ACCUMULATED_DATA_LIMIT
+		stats.accumulated_source_bytes > SYSTEM_POLICY.SAFETY.SOURCE_LIMIT_BYTES ||
+		stats.accumulated_data_bytes > SYSTEM_POLICY.SAFETY.DATA_LIMIT_BYTES
 	);
 }
 

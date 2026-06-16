@@ -12,6 +12,7 @@ import * as os from "node:os";
 // that mock factories can capture references to mutable objects the
 // individual tests reconfigure via beforeEach.
 const coreMocks = vi.hoisted(() => ({
+	SYSTEM_POLICY: { ORCHESTRATION: { REPEAT_SPAWN_WINDOW_MS: 180000, MAX_EXECUTION_SEC: 300, STREAM_HISTORY_DEPTH: 300 }, DISPLAY: { WARM_SNIPPET_CHARS: 500 } },
 	// sessions
 	readMode: vi.fn(),
 	writeMode: vi.fn(),

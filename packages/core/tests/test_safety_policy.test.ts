@@ -12,15 +12,11 @@ import {
 	isAccumulatedLimitExceeded,
 	isPlanningArtifact,
 	validatePromptSyntax,
-	UNIFIED_READ_WARN_LIMIT,
-	UNIFIED_READ_DENY_LIMIT,
-	GREP_PRE_ALLOCATION_DIR_DEFAULT,
-	GREP_PRE_ALLOCATION_DIR_SMALL,
-	GREP_PRE_ALLOCATION_FILE_MAX,
 	estimateGrepReadBytes,
 	isUnifiedLimitExceeded,
 	isUnifiedLimitApproaching,
 } from "../src/safety-policy";
+import { SYSTEM_POLICY } from "../src/policy";
 
 describe("enforcePromptLengthLimit", () => {
 	it("test_enforce_prompt_length_limit_under", () => {
@@ -364,32 +360,32 @@ describe("unified safety features", () => {
 	it("test_estimate_grep_read_bytes_file", () => {
 		expect(estimateGrepReadBytes(tmpFileSmall)).toBe(2);
 		expect(estimateGrepReadBytes(tmpFileLarge)).toBe(
-			GREP_PRE_ALLOCATION_FILE_MAX,
+			SYSTEM_POLICY.GREP.FILE_MAX_BYTES,
 		);
 	});
 
 	it("test_estimate_grep_read_bytes_directory", () => {
 		expect(estimateGrepReadBytes(tmpdir(), 3)).toBe(
-			GREP_PRE_ALLOCATION_DIR_SMALL,
+			SYSTEM_POLICY.GREP.DIR_SMALL_BYTES,
 		);
 		expect(estimateGrepReadBytes(tmpdir(), 10)).toBe(
-			GREP_PRE_ALLOCATION_DIR_DEFAULT,
+			SYSTEM_POLICY.GREP.DIR_DEFAULT_BYTES,
 		);
 		const result = estimateGrepReadBytes(tmpdir());
 		expect([
-			GREP_PRE_ALLOCATION_DIR_SMALL,
-			GREP_PRE_ALLOCATION_DIR_DEFAULT,
+			SYSTEM_POLICY.GREP.DIR_SMALL_BYTES,
+			SYSTEM_POLICY.GREP.DIR_DEFAULT_BYTES,
 		]).toContain(result);
 		expect(estimateGrepReadBytes("/nonexistent-path-abc-123")).toBe(
-			GREP_PRE_ALLOCATION_DIR_DEFAULT,
+			SYSTEM_POLICY.GREP.DIR_DEFAULT_BYTES,
 		);
 	});
 
 	it("test_is_unified_limit_checkers", () => {
 		expect(isUnifiedLimitApproaching(70 * 1024)).toBe(false);
-		expect(isUnifiedLimitApproaching(UNIFIED_READ_WARN_LIMIT + 1)).toBe(true);
+		expect(isUnifiedLimitApproaching(SYSTEM_POLICY.SAFETY.FILE_READ_WARN_BYTES + 1)).toBe(true);
 
 		expect(isUnifiedLimitExceeded(150 * 1024)).toBe(false);
-		expect(isUnifiedLimitExceeded(UNIFIED_READ_DENY_LIMIT + 1)).toBe(true);
+		expect(isUnifiedLimitExceeded(SYSTEM_POLICY.SAFETY.FILE_READ_DENY_BYTES + 1)).toBe(true);
 	});
 });

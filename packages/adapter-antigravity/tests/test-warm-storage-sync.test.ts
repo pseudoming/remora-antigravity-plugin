@@ -72,6 +72,7 @@ vi.mock("@remora/core", () => {
 	}
 
 	return {
+		SYSTEM_POLICY: { ORCHESTRATION: { REPEAT_SPAWN_WINDOW_MS: 180000, MAX_EXECUTION_SEC: 300, STREAM_HISTORY_DEPTH: 300 }, DISPLAY: { WARM_SNIPPET_CHARS: 500 } },
 		getDbPath: () => TEST_DB_PATH,
 		checkDbExists: () => {
 			try {

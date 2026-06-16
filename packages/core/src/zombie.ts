@@ -4,6 +4,8 @@
  * Platform-specific /proc scanning lives in adapter/ (zombie_linux.py / equivalent).
  */
 
+import { SYSTEM_POLICY } from "./policy";
+
 export const INFRASTRUCTURE_KEYWORDS: ReadonlySet<string> = new Set([
 	"compactor.js",
 	"safety-check.js",
@@ -29,7 +31,7 @@ export function isInfrastructureProcess(
 
 export function isProcessExpired(
 	elapsedSeconds: number,
-	threshold: number = 300.0,
+	threshold: number = SYSTEM_POLICY.SANDBOX.ZOMBIE_TIMEOUT_SEC,
 ): boolean {
 	return elapsedSeconds > threshold;
 }

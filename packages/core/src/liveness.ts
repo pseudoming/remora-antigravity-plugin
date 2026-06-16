@@ -1,3 +1,5 @@
+import { SYSTEM_POLICY } from "./policy";
+
 const RELAX_PATTERN: RegExp = new RegExp(
 	"(草稿|想法|讨论|draft|brainstorm|discuss)",
 	"i",
@@ -127,7 +129,9 @@ export function judgeZombie(
 	heavyTools?: Set<string>,
 ): [boolean, number] {
 	const isHeavy = heavyTools ? heavyTools.has(toolName) : false;
-	const limit = isHeavy ? 180 : 60;
+	const limit = isHeavy
+		? SYSTEM_POLICY.SANDBOX.HEAVY_TOOL_TIMEOUT_SEC
+		: SYSTEM_POLICY.SANDBOX.NORMAL_TOOL_TIMEOUT_SEC;
 	return [idleSeconds > limit, limit];
 }
 

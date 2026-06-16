@@ -107,6 +107,7 @@ import {
 	getProjectUuidByConv,
 	getActiveTopic,
 	getDecisionsByTopic,
+	SYSTEM_POLICY,
 } from "@remora/core";
 import { cleanup, getStats } from "../bridge/stats";
 import {
@@ -351,8 +352,8 @@ function _main(context: Record<string, unknown>): {
 	let isNewTurn = false;
 
 	try {
-		// 使用 CDAL 的原生 SQLite 倒序查询接口，安全获取最后 300 步
-		const steps = cdal.streamStepsReverse(300);
+		// 使用 CDAL 的原生 SQLite 倒序查询接口，安全获取最后 N 步
+		const steps = cdal.streamStepsReverse(SYSTEM_POLICY.ORCHESTRATION.STREAM_HISTORY_DEPTH);
 		heartbeatSteps = Array.isArray(steps) ? steps : Array.from(steps);
 
 		// 提取 last_msg 和 is_new_turn
