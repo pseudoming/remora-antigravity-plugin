@@ -124,7 +124,7 @@ vi.mock("@remora/core", async (importOriginal) => {
 vi.mock("node:fs", async (importOriginal) => {
 	const actual = await importOriginal();
 	const path = require("node:path");
-	const realRulesPath = path.resolve(__dirname, "../conf/remora-rules.json");
+	const realRulesPath = path.resolve(__dirname, "../../../conf/remora-rules.json");
 	return {
 		...actual,
 		existsSync: vi.fn((p) => {

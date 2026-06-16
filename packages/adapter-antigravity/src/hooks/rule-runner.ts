@@ -5,7 +5,7 @@ import {
 	IFactExtractor,
 	DecisionResult,
 } from "@remora/core";
-import { findPluginRoot, resolveSecurePath } from "../bridge/paths";
+import { findPluginRoot, resolveSecurePath, isPathSensitive } from "../bridge/paths";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
@@ -22,19 +22,6 @@ import {
 } from "@remora/core";
 import { getSubagentType, getSubagentTypeByConvId } from "../bridge/subagent";
 import { ConversationDataAccessLayer } from "../bridge/conversation";
-
-function isPathSensitive(target: string): boolean {
-	if (!target) return false;
-	const secure = resolveSecurePath(target);
-	try {
-		const cwd = fs.realpathSync(process.cwd());
-		if (secure.startsWith(cwd)) {
-			const relPath = secure.slice(cwd.length);
-			return isRotSensitivePath(relPath) || isRotSensitiveFile(relPath);
-		}
-	} catch (e) {}
-	return isRotSensitivePath(secure) || isRotSensitiveFile(secure);
-}
 
 export class AntigravityFactExtractor implements IFactExtractor {
 	public extract(rawPayload: Record<string, any>): Fact {

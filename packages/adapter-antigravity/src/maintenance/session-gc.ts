@@ -91,7 +91,6 @@ export function pruneDeadSubagentWorktrees(brainDir?: string): void {
 			if (fs.existsSync(parentWorktreeDir)) {
 				const shortId = convId.slice(0, 8);
 				const dirs = fs.readdirSync(parentWorktreeDir);
-				let prunedAny = false;
 				for (const dirName of dirs) {
 					if (dirName.includes(shortId) || dirName === convId) {
 						const worktreePath = path.join(parentWorktreeDir, dirName);
@@ -100,22 +99,34 @@ export function pruneDeadSubagentWorktrees(brainDir?: string): void {
 							const ageMs = Date.now() - stat.mtimeMs;
 							if (ageMs > 3600000) {
 								fs.rmSync(worktreePath, { recursive: true, force: true });
-								prunedAny = true;
 							}
-						} catch (e) {
-    console.debug("[Remora FS/DB Debug] Omission expected: ", e.message || e);
-  }
+						} catch (e: any) {
+							console.debug("[Remora FS/DB Debug] Omission expected: ", e.message || e);
+						}
 					}
-				}
-				if (prunedAny) {
-					try {
-						execSync("git worktree prune");
-					} catch (err) {
-    console.debug("[Remora FS/DB Debug] Omission expected: ", err.message || err);
-  }
 				}
 			}
 		}
+	}
+
+	try {
+		execSync("git worktree prune", { stdio: "ignore" });
+	} catch (err: any) {
+		console.debug("[Remora FS/DB Debug] Omission expected: ", err.message || err);
+	}
+
+	try {
+		const output = execSync('git branch --list "subagent-*"').toString();
+		const branches = output.split('\n').map(b => b.replace('*', '').trim()).filter(Boolean);
+		for (const branch of branches) {
+			try {
+				execSync(`git branch -D ${branch}`, { stdio: 'ignore' });
+			} catch {
+				// Branch in use by active worktree, safely ignored
+			}
+		}
+	} catch (e: any) {
+		console.debug("[Remora FS/DB Debug] Branch cleanup failed: ", e.message || e);
 	}
 }
 

@@ -2,7 +2,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { getDbPath as coreGetDbPath, HOOKS_PROFILE_LOG } from "@remora/core";
+import {
+	getDbPath as coreGetDbPath,
+	HOOKS_PROFILE_LOG,
+	isRotSensitivePath,
+	isRotSensitiveFile,
+} from "@remora/core";
 export { HOOKS_PROFILE_LOG };
 
 export function findPluginRoot(): string {
@@ -104,4 +109,19 @@ export function isExemptedPath(targetFile: string): boolean {
 		targetFile.includes(".gemini/config/projects/") ||
 		targetFile.includes(".gemini/config/plugins/")
 	);
+}
+
+export function isPathSensitive(target: string): boolean {
+	if (!target) return false;
+	const secure = resolveSecurePath(target);
+	try {
+		const cwd = fs.realpathSync(process.cwd());
+		if (secure.startsWith(cwd)) {
+			const relPath = secure.slice(cwd.length);
+			return isRotSensitivePath(relPath) || isRotSensitiveFile(relPath);
+		}
+	} catch (e: any) {
+		console.debug("[Hook Debug] Path resolution failed:", e);
+	}
+	return isRotSensitivePath(secure) || isRotSensitiveFile(secure);
 }

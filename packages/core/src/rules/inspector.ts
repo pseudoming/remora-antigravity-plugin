@@ -238,65 +238,7 @@ function inspectTokens(
 					}
 				}
 			}
-		} else if (exe === "npx") {
-			const testCmds = ["vitest", "jest", "pytest", "mocha"];
-			const buildCmds = ["tsup", "tsc", "esbuild", "webpack"];
-			if (
-				args.some(
-					(arg) =>
-						testCmds.includes(arg) ||
-						testCmds.some((cmd) => arg.startsWith(cmd + "@")),
-				)
-			) {
-				return ["deny", "test"];
-			}
-			if (
-				args.some(
-					(arg) =>
-						buildCmds.includes(arg) ||
-						buildCmds.some((cmd) => arg.startsWith(cmd + "@")),
-				)
-			) {
-				return ["deny", "build"];
-			}
-			if (args.includes("run")) {
-				if (args.includes("build")) {
-					return ["deny", "build"];
-				}
-				if (args.includes("test")) {
-					return ["deny", "test"];
-				}
-			}
-		} else if (exe === "pnpm") {
-			const testCmds = ["vitest", "jest", "pytest", "mocha"];
-			const buildCmds = ["tsup", "tsc", "esbuild", "webpack"];
-			if (
-				args.some(
-					(arg) =>
-						testCmds.includes(arg) ||
-						testCmds.some((cmd) => arg.startsWith(cmd + "@")),
-				)
-			) {
-				return ["deny", "test"];
-			}
-			if (
-				args.some(
-					(arg) =>
-						buildCmds.includes(arg) ||
-						buildCmds.some((cmd) => arg.startsWith(cmd + "@")),
-				)
-			) {
-				return ["deny", "build"];
-			}
-			if (args.includes("run")) {
-				if (args.includes("build")) {
-					return ["deny", "build"];
-				}
-				if (args.includes("test")) {
-					return ["deny", "test"];
-				}
-			}
-		} else if (exe === "bun") {
+		} else if (exe === "npx" || exe === "pnpm" || exe === "bun") {
 			const testCmds = ["vitest", "jest", "pytest", "mocha"];
 			const buildCmds = ["tsup", "tsc", "esbuild", "webpack"];
 			if (

@@ -7,7 +7,7 @@ import * as path from "node:path";
 import { getDataDir, getAntigravityDir } from "../bridge/paths";
 import { initDb } from "../schema/schema-init";
 
-import { pruneExpiredWatermarks } from "../maintenance/session-gc";
+import { pruneExpiredWatermarks, pruneDeadSubagentWorktrees } from "../maintenance/session-gc";
 import { runGarbageCollection } from "../maintenance/topic-gc";
 
 import { acquireLock, releaseLock } from "./sidecar-lock";
@@ -63,6 +63,7 @@ function main(): void {
 		const cycleStart = Date.now() / 1000;
 		try {
 			pruneExpiredWatermarks();
+			pruneDeadSubagentWorktrees();
 			processSessions(cycleStart);
 
 			const conn = getConn();

@@ -91,7 +91,8 @@ function _handlePreInvocation(
 				}
 			}
 		} catch (_e) {
-			// pass  // Line C failure must never block the conversation
+			console.debug("[Hook Debug] Line C injection query failed:", _e);
+			// Line C failure must never block the conversation
 		}
 	}
 
@@ -215,6 +216,7 @@ function _runLineC(
 			llmOutput =
 				resp?.response?.newConversation?.reply ?? JSON.stringify(resp);
 		} catch (_e2) {
+			console.debug("[Hook Debug] Failed to invoke flash_lite conversation:", _e2);
 			markFired(convId, windowKey, String(turnInterval));
 			return [];
 		}
@@ -230,6 +232,7 @@ function _runLineC(
 	try {
 		result = JSON.parse(jsonMatch[1].trim());
 	} catch (_e3) {
+		console.debug("[Hook Debug] JSON parse result conflicts failed:", _e3);
 		markFired(convId, windowKey, String(turnInterval));
 		return [];
 	}
@@ -464,7 +467,7 @@ function _safeBumpInjection(
 			);
 			setHookState(convId, turnIdx, stateKey, String(currentFailures + 1));
 		} catch (stateErr) {
-			// Fail-safe fallback
+			console.error("[Hook Error] Fail-safe fallback writing injection_bump_failures failed:", stateErr);
 		}
 	}
 }

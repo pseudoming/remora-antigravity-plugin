@@ -141,6 +141,7 @@ vi.mock("../src/schema/schema-init", () => ({
 
 vi.mock("../src/maintenance/session-gc", () => ({
 	pruneExpiredWatermarks: vi.fn(),
+	pruneDeadSubagentWorktrees: vi.fn(),
 }));
 
 vi.mock("../src/maintenance/topic-gc", () => ({

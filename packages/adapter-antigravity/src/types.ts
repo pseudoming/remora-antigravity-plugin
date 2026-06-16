@@ -24,3 +24,22 @@ export interface PreToolUseResponse {
 }
 
 export type AntigravityHookResponse = PreInvocationResponse | PreToolUseResponse;
+
+export interface DynamicRuleContext {
+	rawContext: Record<string, unknown>;
+	toolName: string;
+	args: Record<string, unknown>;
+	transcriptPath: string;
+	convId: string;
+	currentTurnIdx: number;
+	isSub: boolean;
+	isReadonlySub: boolean;
+	isDeepDiverSub: boolean;
+	isMergerSub: boolean;
+	mode: string;
+	subagentType: string | null;
+}
+
+export type DynamicRule = (
+	ctx: DynamicRuleContext,
+) => PreToolUseResponse | undefined;
