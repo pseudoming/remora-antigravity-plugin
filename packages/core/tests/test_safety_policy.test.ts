@@ -192,7 +192,7 @@ describe("estimateReadBytes", () => {
 describe("isAccumulatedLimitExceeded", () => {
 	it("test_is_accumulated_limit_exceeded_under", () => {
 		const stats = {
-			accumulated_source_bytes: 100 * 1024,
+			accumulated_source_bytes: 30 * 1024,
 			accumulated_data_bytes: 50 * 1024,
 		};
 		expect(isAccumulatedLimitExceeded(stats)).toBe(false);

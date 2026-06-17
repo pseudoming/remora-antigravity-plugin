@@ -605,8 +605,8 @@ describe("hookEntrypoint", () => {
 		const output = getStdoutOutput();
 		const result = JSON.parse(output);
 		expect(result["decision"]).toBe("allow");
-		expect("decision_reason" in result).toBe(true);
-		expect(result["decision_reason"]).toContain("Remora Fallback");
+		expect("reason" in result).toBe(true);
+		expect(result["reason"]).toContain("Remora Fallback");
 	});
 
 	it("test_hook_entrypoint_exception_no_decision_fallback", () => {
@@ -674,7 +674,7 @@ describe("hookEntrypoint", () => {
 		const output = getStdoutOutput();
 		const result = JSON.parse(output);
 		expect(result["decision"]).toBe("allow");
-		expect(result["decision_reason"]).toContain("Remora Fallback");
+		expect(result["reason"]).toContain("Remora Fallback");
 	});
 
 	it("test_hook_entrypoint_system_exit_zero_non_tool", () => {

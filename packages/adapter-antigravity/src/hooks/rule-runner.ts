@@ -353,13 +353,9 @@ export class RuleRunner {
 			const pluginRoot = findPluginRoot();
 			const rulesPath = path.join(pluginRoot, "conf", "remora-rules.json");
 			if (fs.existsSync(rulesPath)) {
-				console.log("TRYING TO LOAD RULES FROM:", rulesPath);
+				info("RuleRunner loading rules from: " + rulesPath);
 				const raw = fs.readFileSync(rulesPath, "utf-8");
-				console.log(
-					"LOADED RAW:",
-					typeof raw,
-					raw ? raw.substring(0, 50) : raw,
-				);
+				info(`RuleRunner loaded ${typeof raw} ${raw ? raw.substring(0, 50) : "(empty)"}`);
 				const parsed = JSON.parse(raw);
 				this.rules = parsed.rules || [];
 			}

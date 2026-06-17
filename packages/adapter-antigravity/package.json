@@ -11,14 +11,17 @@
 		"bin/",
 		"conf/",
 		"schema/",
-		"agents/"
+		"agents/",
+		"skills/",
+		"sidecars/",
+		"plugin.json"
 	],
 	"scripts": {
 		"build": "node build.js",
-		"test": "vitest run"
+		"test": "vitest run",
+		"postinstall": "node bin/install.js --force"
 	},
 	"dependencies": {
-		"@remora/core": "file:../core",
 		"better-sqlite3": "^11.0.0"
 	},
 	"devDependencies": {
@@ -26,6 +29,7 @@
 		"@types/node": "^25.9.2",
 		"tsup": "^8.5.1",
 		"typescript": "^5.5.0",
-		"vitest": "^4.1.8"
+		"vitest": "^4.1.8",
+		"@remora/core": "file:../core"
 	}
 }

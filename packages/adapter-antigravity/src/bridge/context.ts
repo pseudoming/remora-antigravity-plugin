@@ -185,7 +185,7 @@ export function hookEntrypoint(fallbackResult?: Record<string, unknown>) {
 					activeProfiler?.step(`func_error: ${String(se)}`);
 					const safeFallback = { ...fallback };
 					if ("decision" in safeFallback) {
-						safeFallback["decision_reason"] =
+						safeFallback["reason"] =
 							`Remora Fallback (Error: ${String(se)})`;
 					}
 					error(`Hook Error: ${String(se)}`);

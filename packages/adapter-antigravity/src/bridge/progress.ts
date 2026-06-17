@@ -37,7 +37,11 @@ export class ProgressSentinel {
 			return false;
 		}
 
-		fs.mkdirSync(path.dirname(progressPath), { recursive: true });
+		try {
+			fs.mkdirSync(path.dirname(progressPath), { recursive: true });
+		} catch (_e) {
+			return false;
+		}
 
 		let oldData: Record<string, any> = {};
 		if (fs.existsSync(progressPath)) {

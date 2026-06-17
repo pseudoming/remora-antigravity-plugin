@@ -1,0 +1,7 @@
+# npm pack artifacts (copied from repo root by build.js)
+agents/
+conf/
+plugin.json
+sidecars/
+skills/
+*.tgz

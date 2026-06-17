@@ -104,6 +104,8 @@ export function ensureRemoraSystemProjectConfig(): void {
 })();
 
 import {
+	info,
+	debug,
 	warn,
 	error,
 	cleanSystemReminders,
@@ -180,20 +182,6 @@ function _main(context: AntigravityHookContext): {
 	}
 
 	const transcriptPath = context.transcriptPath ?? "";
-	const pluginRoot = findPluginRoot();
-	recoverCoreDistSymlink(pluginRoot);
-	const sandboxedCoreDist = path.join(pluginRoot, "packages", "core", "dist");
-
-	const isTest = !!(process.env.VITEST || process.env.NODE_ENV === "test");
-	if (!isTest && !fs.existsSync(sandboxedCoreDist)) {
-		return {
-			injectSteps: [
-				{
-					ephemeralMessage: `🚨 **[MONOREPO_BUILD_ERROR]** Core package not built. Please run: cd ${pluginRoot} && npm run build`,
-				},
-			],
-		};
-	}
 
 	// 物理缓存 LS API 凭据以解决子代理在 Hook 沙盒中缺乏鉴权环境变量的问题
 	const lsAddr = process.env["ANTIGRAVITY_LS_ADDRESS"];
@@ -736,9 +724,9 @@ function _main(context: AntigravityHookContext): {
 							const hashKey = "project_docs_seed_hash";
 							const prevHash = getArtifactHash(hashKey, conn);
 
-							console.log(`[Hook Info] Docs hash check: prev=${prevHash || "(none)"}, current=${currentHash}, files=${targetFiles.length}`);
+							info(`[Hook Info] Docs hash check: prev=${prevHash || "(none)"}, current=${currentHash}, files=${targetFiles.length}`);
 							if (currentHash !== prevHash) {
-								console.log("[Hook Info] Project docs changed. Spawning detached seed extraction...");
+								info("[Hook Info] Project docs changed. Spawning detached seed extraction...");
 								upsertArtifactHash(hashKey, currentHash, conn);
 								const scriptPath = path.join(findPluginRoot(), "packages", "adapter-antigravity", "dist", "sidecar", "seed-docs.js");
 								const worker = spawn(process.execPath, [scriptPath, projectUuid, workspacePath], {
@@ -747,7 +735,7 @@ function _main(context: AntigravityHookContext): {
 									env: process.env,
 								});
 								worker.unref();
-								console.log(`[Hook Info] Seed extraction worker spawned (pid=${worker.pid})`);
+								info(`[Hook Info] Seed extraction worker spawned (pid=${worker.pid})`);
 							} else {
 							}
 						} else {
@@ -770,13 +758,13 @@ function _main(context: AntigravityHookContext): {
 				ephemeralMessage: formatSubagentDispatchReminder(),
 			});
 			
-			console.log(`[Hook Info] dispatch triggered: convId=${convId}, projectUuid=${projectUuid || "(null)"}, srcKb=${srcKb}, dataKb=${dataKb}, hasSubagentKeyword=${hasSubagentKeyword}`);
+			info(`[Hook Info] dispatch triggered: convId=${convId}, projectUuid=${projectUuid || "(null)"}, srcKb=${srcKb}, dataKb=${dataKb}, hasSubagentKeyword=${hasSubagentKeyword}`);
 			if (projectUuid) {
 				const projectDecisionsPath = path.join(getDataDir(), projectUuid, "decisions.json");
 				let constraintsText = "";
 				try {
 					const constraints = getProjectConstraints(projectUuid);
-					console.log(`[Hook Info] Loaded ${constraints.length} behavioral constraints for ${projectUuid}`);
+					info(`[Hook Info] Loaded ${constraints.length} behavioral constraints for ${projectUuid}`);
 					if (constraints && constraints.length > 0) {
 						constraintsText = `\n\n<system-discipline>\n[CRITICAL BEHAVIORAL CONSTRAINTS]\n${constraints.map(c => `- ${c.decision}`).join("\n")}\n</system-discipline>`;
 					}

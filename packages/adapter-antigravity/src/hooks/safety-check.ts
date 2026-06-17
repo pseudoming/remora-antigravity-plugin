@@ -49,8 +49,6 @@ export function main(
 			return {
 				decision: "deny",
 				reason: engineResult.payload?.message || "Blocked by Rule Engine",
-				decision_reason:
-					engineResult.payload?.message || "Blocked by Rule Engine",
 			};
 		}
 	} catch (e: any) {

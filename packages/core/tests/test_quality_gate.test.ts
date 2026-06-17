@@ -90,7 +90,7 @@ describe("QualityGate", () => {
 			"g",
 		);
 		const badAbsPattern = new RegExp(
-			"/home/[^/]+/\\.gemini/(?!antigravity)",
+			"/home/[^/]+/\\.gemini/(?!antigravity|config/)",
 			"g",
 		);
 

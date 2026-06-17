@@ -36,12 +36,14 @@ function doCopy(src: string, dst: string, skipExisting = false): void {
 
 function findPluginRoot(): string {
 	let dir = path.resolve(__dirname);
+	let found: string | null = null;
 	while (dir !== "/" && dir !== "") {
 		if (fs.existsSync(path.join(dir, "plugin.json"))) {
-			return dir;
+			found = dir;
 		}
 		dir = path.dirname(dir);
 	}
+	if (found) return found;
 	throw new Error(
 		"FATAL: Cannot find plugin.json to anchor PLUGIN_ROOT. Are you running outside the plugin directory?",
 	);
@@ -415,27 +417,7 @@ function mainReal(
 		log(`[DRY-RUN] Would init DB at: ${dbPath}`);
 	}
 
-	const isTest = !!(process.env.VITEST || process.env.NODE_ENV === "test");
-	if (!isTest) {
-		const coreDistPath = path.join(pluginRoot, "packages", "core", "dist");
-		if (!fs.existsSync(coreDistPath)) {
-			log(
-				`  packages/core/dist not found. Building workspace packages/core...`,
-			);
-			try {
-				const { execSync } = require("node:child_process");
-				execSync("npm run build --workspace=packages/core", {
-					cwd: pluginRoot,
-					stdio: "inherit",
-					env: process.env,
-				});
-				log(`  packages/core built successfully.`);
-			} catch (err) {
-				log(`  [ERROR] Failed to build packages/core: ${err}`);
-				throw err;
-			}
-		}
-	}
+	// Note: @remora/core is bundled inline by tsup (noExternal). No separate core build needed at npm install time.
 
 	doWrite(flagPath, "installed");
 
@@ -522,6 +504,29 @@ export function main(): void {
 				const { execSync } = require("node:child_process");
 				execSync(rsyncCmd, { stdio: "inherit" });
 				log(`  Files synchronized successfully.`);
+
+					// Normalize npm flat layout → monorepo layout expected by hook templates
+					const targetDist = path.join(targetPluginRoot, "dist");
+					const monorepoDist = path.join(targetPluginRoot, "packages", "adapter-antigravity", "dist");
+					if (fs.existsSync(targetDist) && !fs.existsSync(monorepoDist)) {
+						fs.mkdirSync(path.dirname(monorepoDist), { recursive: true });
+						fs.symlinkSync(targetDist, monorepoDist, "dir");
+						log("  Normalized npm flat layout to monorepo path for hook templates");
+
+					// Symlink better-sqlite3 so hooks can find it at runtime
+					try {
+						const bsqlPath = require.resolve("better-sqlite3");
+						const targetNodeModules = path.join(targetPluginRoot, "node_modules");
+						const targetBsql = path.join(targetNodeModules, "better-sqlite3");
+						if (!fs.existsSync(targetBsql)) {
+							fs.mkdirSync(targetNodeModules, { recursive: true });
+							fs.symlinkSync(path.dirname(path.dirname(bsqlPath)), targetBsql, "dir");
+							log("  Linked better-sqlite3 for hook runtime");
+						}
+					} catch (_e) {
+						log("  [WARN] better-sqlite3 not found, hooks may fail at runtime");
+					}
+					}
 
 				// 物理清除目标运行目录中的开发期多余文件与源码
 				const obsoleteItems = [
