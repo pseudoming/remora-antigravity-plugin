@@ -30,6 +30,11 @@
 				"type": "command",
 				"command": "node {PLUGIN_ROOT}/packages/adapter-antigravity/dist/sandbox/check-subagents-liveness.js",
 				"timeout": 30
+			},
+			{
+				"type": "command",
+				"command": "node {PLUGIN_ROOT}/packages/adapter-antigravity/dist/hooks/subagent-auto-def.js",
+				"timeout": 30
 			}
 		],
 		"PreToolUse": [
