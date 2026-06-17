@@ -5,3 +5,6 @@ plugin.json
 sidecars/
 skills/
 *.tgz
+
+# Test sandbox temporary directory
+tests/temp_test_data/

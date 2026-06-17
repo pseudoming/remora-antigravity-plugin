@@ -779,18 +779,45 @@ describe("TestPruneSidecarEvents", () => {
 			"events",
 		);
 		realFs.value.mkdirSync(eventsDir, { recursive: true });
-		realFs.value.writeFileSync(path.join(eventsDir, "event1.json"), "{}");
-		realFs.value.writeFileSync(path.join(eventsDir, "event2.json"), "{}");
+
+		// 1. Test that files are NOT pruned when total JSON files count is <= 10
+		realFs.value.writeFileSync(path.join(eventsDir, "temp_event1.json"), "{}");
+		realFs.value.writeFileSync(path.join(eventsDir, "temp_event2.json"), "{}");
+		pruneSidecarEvents();
+		expect(realFs.value.existsSync(path.join(eventsDir, "temp_event1.json"))).toBe(true);
+		expect(realFs.value.existsSync(path.join(eventsDir, "temp_event2.json"))).toBe(true);
+
+		// Clean up the temporary test files
+		realFs.value.unlinkSync(path.join(eventsDir, "temp_event1.json"));
+		realFs.value.unlinkSync(path.join(eventsDir, "temp_event2.json"));
+
+		// 2. Test that only the oldest files are pruned when count > 10, keeping exactly 10 latest files
+		const now = Date.now();
+		for (let i = 1; i <= 12; i++) {
+			const filePath = path.join(eventsDir, `event${i}.json`);
+			realFs.value.writeFileSync(filePath, "{}");
+			// Set staggered modification times (older i = older mtime)
+			const mtime = new Date(now - (12 - i) * 2000);
+			realFs.value.utimesSync(filePath, mtime, mtime);
+		}
 		realFs.value.writeFileSync(path.join(eventsDir, "not_json.txt"), "txt");
 
 		pruneSidecarEvents();
 
+		// event1.json and event2.json (oldest 2) should be deleted
 		expect(realFs.value.existsSync(path.join(eventsDir, "event1.json"))).toBe(
 			false,
 		);
 		expect(realFs.value.existsSync(path.join(eventsDir, "event2.json"))).toBe(
 			false,
 		);
+		// event3.json through event12.json should be kept
+		for (let i = 3; i <= 12; i++) {
+			expect(realFs.value.existsSync(path.join(eventsDir, `event${i}.json`))).toBe(
+				true,
+			);
+		}
+		// non-json files should always be kept
 		expect(realFs.value.existsSync(path.join(eventsDir, "not_json.txt"))).toBe(
 			true,
 		);

@@ -28,13 +28,26 @@ export function pruneSidecarEvents(): void {
 			"events",
 		);
 		if (fs.existsSync(eventsDir)) {
-			for (const f of fs.readdirSync(eventsDir)) {
-				if (f.endsWith(".json")) {
+			const files = fs.readdirSync(eventsDir)
+				.filter((f) => f.endsWith(".json"))
+				.map((f) => {
+					const filePath = path.join(eventsDir, f);
+					return {
+						name: f,
+						path: filePath,
+						mtime: fs.statSync(filePath).mtimeMs,
+					};
+				});
+
+			if (files.length > 10) {
+				// 按修改时间升序排列 (最旧的在前)
+				files.sort((a, b) => a.mtime - b.mtime);
+				const toDelete = files.slice(0, files.length - 10);
+				for (const file of toDelete) {
 					try {
-						fs.unlinkSync(path.join(eventsDir, f));
+						fs.unlinkSync(file.path);
 					} catch (e) {
-						console.error("[Remora Daemon Error] Exception in loop:", e);
-						continue;
+						console.error("[Remora Daemon Error] Exception in prune loop:", e);
 					}
 				}
 			}

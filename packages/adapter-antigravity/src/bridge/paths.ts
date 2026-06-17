@@ -24,6 +24,9 @@ export function findPluginRoot(): string {
 }
 
 export function getDataDir(): string {
+	if (process.env.REMORA_DATA_DIR) {
+		return process.env.REMORA_DATA_DIR;
+	}
 	return path.join(homeDir(), ".remora", "data");
 }
 
