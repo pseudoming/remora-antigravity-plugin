@@ -5,10 +5,10 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 
 export const checkDefineSubagentOverrideRule: DynamicRule = (ctx: DynamicRuleContext): PreToolUseResponse | undefined => {
-	const BUILTIN_AGENTS: ReadonlySet<string> = new Set([
-		"Remora_Deep_Diver",
-		"Remora_ReadOnly_Extractor",
-		"Remora_Merger",
+	const BUILTIN_AGENTS_MAP: ReadonlyMap<string, string> = new Map([
+		["remora_deep_diver", "Remora_Deep_Diver"],
+		["remora_readonly_extractor", "Remora_ReadOnly_Extractor"],
+		["remora_merger", "Remora_Merger"],
 	]);
 
 	function loadBuiltinAgentConfig(name: string): any | null {
@@ -26,7 +26,19 @@ export const checkDefineSubagentOverrideRule: DynamicRule = (ctx: DynamicRuleCon
 
 	if (ctx.toolName !== "define_subagent") return undefined;
 	const name = (ctx.args["name"] as string) ?? "";
-	if (BUILTIN_AGENTS.has(name)) {
+	const matchedCanonicalName = BUILTIN_AGENTS_MAP.get(name.toLowerCase());
+
+	if (matchedCanonicalName) {
+		if (name !== matchedCanonicalName) {
+			return {
+				decision: "deny",
+				reason: makeDenyReason(
+					"CONFIG_OVERRIDE",
+					`Built-in agent name must match the canonical casing exactly: '${matchedCanonicalName}'. Got: '${name}'.`,
+					`Change the name parameter to '${matchedCanonicalName}' and retry define_subagent.`,
+				),
+			};
+		}
 		const config = loadBuiltinAgentConfig(name);
 		if (config) {
 			const reqWrite = ctx.args["enable_write_tools"] !== false;
