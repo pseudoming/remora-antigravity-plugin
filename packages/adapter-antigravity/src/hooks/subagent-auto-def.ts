@@ -35,7 +35,7 @@ export function main(context: AntigravityHookContext): { injectSteps: any[] } {
 			const prompt =
 				"<system-reminder>\n" +
 				"REMORA SYSTEM NOTICE: THE FOLLOWING BUILT-IN SUBAGENTS ARE NOT YET DEFINED IN THIS SESSION:\n" +
-				undefinedAgents.map((name) => `- ${name.toUpperCase()} (CONFIG FILE: agents/${name.toLowerCase()}.json)`).join("\n") + "\n" +
+				undefinedAgents.map((name) => `- ${name} (CONFIG FILE: agents/${name.toLowerCase()}.json)`).join("\n") + "\n" +
 				"YOU ARE STRICTLY PROHIBITED FROM CALLING 'invoke_subagent' BEFORE DEFINING THEM. " +
 				"YOU MUST EXECUTE 'define_subagent' FIRST WITH THEIR RESPECTIVE CONFIGURATIONS IN YOUR VERY FIRST STEP!\n" +
 				"</system-reminder>";
